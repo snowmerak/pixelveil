@@ -7,9 +7,10 @@ import { processorDefinitions } from './processors/registry';
 export function App() {
   const { locale, setLocale, messages } = useLocale();
   const [processorId, setProcessorId] = useState(processorDefinitions[0].id);
+  const [object, setObject] = useState('');
   const definition = processorDefinitions.find((entry) => entry.id === processorId) ?? processorDefinitions[0];
   const processor = useMemo(() => definition.create(), [definition]);
-  const camera = useWebcamProcessor(processor, '');
+  const camera = useWebcamProcessor(processor, object);
   const running = camera.status === 'running';
   const active = running || camera.status === 'requesting';
 
@@ -35,6 +36,7 @@ export function App() {
             type="button"
             className={`mp-button mp-button--${active ? 'secondary' : 'primary'}`}
             onClick={active ? camera.stop : camera.start}
+            disabled={!active && definition.requiresObject && !object.trim()}
           >
             {active ? messages.stopCamera : messages.startCamera}
           </button>
@@ -58,8 +60,22 @@ export function App() {
         </div>
         <div className="processor-details">
           <p id="processor-description">{definition.description[locale]}</p>
-          <p className="mp-text--muted">{messages.noSettings}</p>
+          <p className="mp-text--muted">{definition.requiresObject ? messages.jevHint : messages.noSettings}</p>
         </div>
+        {definition.requiresObject && (
+          <div className="mp-field object-field">
+            <label className="mp-field__label" htmlFor="object">{messages.object}</label>
+            <input
+              id="object"
+              className="mp-input"
+              type="text"
+              value={object}
+              maxLength={2000}
+              onChange={(event) => setObject(event.target.value)}
+              placeholder={messages.objectPlaceholder}
+            />
+          </div>
+        )}
       </section>
 
       {camera.error && (
@@ -74,7 +90,7 @@ export function App() {
         <FrameCanvas canvasRef={camera.outputCanvasRef} title={messages.processed} description={definition.label} running={running} messages={messages.canvas} />
       </div>
 
-      <p className="workspace-note">{messages.localProcessing}</p>
+      <p className="workspace-note">{definition.requiresObject ? messages.remoteProcessing : messages.localProcessing}</p>
       <video ref={camera.videoRef} muted playsInline hidden />
     </main>
   );

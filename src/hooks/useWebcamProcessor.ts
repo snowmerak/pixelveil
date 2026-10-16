@@ -149,7 +149,10 @@ export function useWebcamProcessor(processor: Processor, object: string) {
     };
 
     animationId = requestAnimationFrame(renderFrame);
-    return () => cancelAnimationFrame(animationId);
+    return () => {
+      cancelAnimationFrame(animationId);
+      processor.reset?.();
+    };
   }, [status, processor, object, fail]);
 
   return { videoRef, inputCanvasRef, outputCanvasRef, status, error, start, stop };
