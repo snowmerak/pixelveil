@@ -1,0 +1,6 @@
+supportedArchitectures:
+  os:
+    - current
+  cpu:
+    - current
+    - arm64

@@ -1,0 +1,100 @@
+import { useEffect, useState } from 'react';
+
+export type Locale = 'en' | 'ko';
+export type LocalizedText = Record<Locale, string>;
+
+const english = {
+  language: 'Language',
+  workspaceSubtitle: 'Webcam frame processing workspace',
+  startCamera: 'Start camera',
+  stopCamera: 'Stop camera',
+  processor: 'Processor',
+  noSettings: 'This processor has no additional settings.',
+  original: 'Original',
+  webcamInput: 'Webcam input',
+  processed: 'Processed output',
+  localProcessing: 'Frames are processed locally in your browser.',
+  status: {
+    idle: 'Idle',
+    requesting: 'Waiting for camera permission',
+    running: 'Live',
+    error: 'Error',
+  },
+  canvas: {
+    frameLabel: 'frame',
+    unsupported: 'Your browser does not support canvas.',
+    waiting: 'Waiting for camera input',
+  },
+  errors: {
+    permissionDenied: 'Camera access was denied. Allow camera access in your browser.',
+    notFound: 'No available camera was found.',
+    notReadable: 'Unable to read the camera. Check whether another app is using it.',
+    startFailed: 'Unable to start the camera. Check its connection and browser permissions.',
+    unsupported: 'Camera access is unavailable in this browser. Use HTTPS or localhost.',
+    disconnected: 'The camera was disconnected. Start the camera again.',
+    canvasUnavailable: 'Canvas 2D rendering is unavailable.',
+    processingFailed: 'Frame processing failed.',
+  },
+};
+
+export type Messages = typeof english;
+
+const korean: Messages = {
+  language: '언어',
+  workspaceSubtitle: '웹캠 프레임 처리 작업 공간',
+  startCamera: '카메라 시작',
+  stopCamera: '카메라 중지',
+  processor: '프로세서',
+  noSettings: '현재 프로세서는 별도 설정이 없습니다.',
+  original: '원본',
+  webcamInput: '웹캠 입력',
+  processed: '처리 결과',
+  localProcessing: '프레임은 브라우저 안에서 처리됩니다.',
+  status: {
+    idle: '대기 중',
+    requesting: '카메라 권한 확인 중',
+    running: '실시간 입력 중',
+    error: '오류',
+  },
+  canvas: {
+    frameLabel: '프레임',
+    unsupported: '이 브라우저는 캔버스를 지원하지 않습니다.',
+    waiting: '카메라 입력 대기 중',
+  },
+  errors: {
+    permissionDenied: '카메라 접근이 거부되었습니다. 브라우저에서 카메라 권한을 허용해 주세요.',
+    notFound: '사용 가능한 카메라를 찾지 못했습니다.',
+    notReadable: '카메라를 읽을 수 없습니다. 다른 앱에서 사용 중인지 확인해 주세요.',
+    startFailed: '카메라를 시작하지 못했습니다. 연결 상태와 브라우저 권한을 확인해 주세요.',
+    unsupported: '이 브라우저에서 카메라를 사용할 수 없습니다. HTTPS 또는 localhost로 접속해 주세요.',
+    disconnected: '카메라 연결이 종료되었습니다. 다시 시작해 주세요.',
+    canvasUnavailable: 'Canvas 2D 렌더링을 사용할 수 없습니다.',
+    processingFailed: '프레임 처리에 실패했습니다.',
+  },
+};
+
+const translations: Record<Locale, Messages> = { en: english, ko: korean };
+const storageKey = 'pixelveil.locale';
+
+function getInitialLocale(): Locale {
+  try {
+    return localStorage.getItem(storageKey) === 'ko' ? 'ko' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+export function useLocale() {
+  const [locale, setLocale] = useState<Locale>(getInitialLocale);
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    try {
+      localStorage.setItem(storageKey, locale);
+    } catch {
+      return;
+    }
+  }, [locale]);
+
+  return { locale, setLocale, messages: translations[locale] };
+}
