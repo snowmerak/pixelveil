@@ -28,8 +28,10 @@ pnpm preview
 
 - `src/processors/Processor.ts`: `process(inputFrame: ImageData, object: string): ImageData` 인터페이스
 - `src/processors/Dummy.ts`: 전달받은 프레임을 그대로 반환하는 기본 구현
-- `src/processors/JevSimple.ts`: 동기 렌더링과 단일 비동기 검출 요청을 연결하는 Jev 구현
-- `src/processors/jevClient.ts`: 이미지 인코딩, Box·존재 여부 요청, 응답 검증
+- `src/processors/JevProcessor.ts`: 프레임 드롭, 최근 bbox 적용, 검출 주기와 취소 상태 관리
+- `src/processors/JevSimple.ts`: 단일 객체 검출 프로세서
+- `src/processors/JevScroll.ts`: 최대 6개 객체 검출 프로세서
+- `src/processors/jevClient.ts`: 이미지 인코딩, Choice·Box·존재 여부 요청, 응답 검증
 - `server/jevProxy.ts`: 개발·미리보기 서버의 TypeSafe API 프록시
 - `src/processors/registry.ts`: UI에 표시할 프로세서 이름, 설명, 생성 함수
 - `src/helpers/`: bbox 영역 모자이크 등 프레임 처리 헬퍼
@@ -66,6 +68,19 @@ pnpm preview
 - 실패하면 다음 `process` 호출에서 오류를 전달해 카메라를 중지합니다. 수정 후 카메라를 다시 시작해 재시도합니다. 자동 재시도는 하지 않습니다.
 - `JEV_TIMEOUT_MS`는 서버 요청 제한 시간이며 기본 30000ms입니다. 환경값 변경은 Vite를 재시작해야 반영됩니다.
 - `/api/jev`는 Vite 개발 서버와 미리보기 서버에서 제공합니다. 정적 `dist`만 배포할 때는 같은 경로의 서버 프록시를 별도로 준비해야 합니다.
+
+## Jev · Scroll decision
+
+같은 API 키 설정으로 프로세서에서 **Jev · Scroll decision**을 선택하고 대상 설명을 입력합니다. 한 검출 주기는 다음과 같습니다.
+
+1. 원본 프레임을 PNG로 한 번만 인코딩합니다.
+2. [Choice 질의](https://docs.typesafe.ai/primitives/choice)로 객체 수를 `0 / 1 / 2 / 3 / 4 / 5 / 6개 이상` 중 선택합니다. `0`이면 bbox 캐시를 비우고 주기를 마칩니다.
+3. 같은 PNG로 두 번째 요청을 보냅니다. 선택된 개수(최대 6개)만큼 Box 질의를 한 요청에 넣습니다. 각 질의는 위쪽 변의 위치를 기준으로 위→아래, 동률이면 왼쪽 변 기준 왼쪽→오른쪽으로 정렬한 N번째 객체 하나를 찾도록 지시합니다.
+4. 모든 bbox를 검증한 뒤 캐시 전체를 한 번에 교체합니다. 응답 누락·잘못된 좌표·요청 실패는 오류로 처리하며 일부 bbox만 적용하지 않습니다.
+
+인코딩부터 두 번째 응답까지 전체 주기 동안 추가 프레임은 검출 대상으로 드롭합니다. 네트워크 요청은 순차적으로 하나씩 보내고, 렌더링에는 이전 주기의 bbox들을 계속 사용합니다. 마지막 응답이 끝난 뒤 들어오는 새 프레임으로 다음 주기를 시작합니다. 대상 변경·중지·교체 시 어느 단계에 있든 취소하고 이전 응답을 무시합니다.
+
+이 구현은 모델의 개수 추정과 순서 지시 수행을 실험하는 PoC입니다. 실제로 서로 다른 객체를 모두 찾거나 중복 bbox를 피하는 정확도를 보장하지 않습니다. 키 설정·프록시·타임아웃·첫 검출 전 원본 표시 동작은 Simple decision과 같습니다. 타임아웃은 각 HTTP 요청에 별도로 적용됩니다.
 
 ## 영역 모자이크 헬퍼
 

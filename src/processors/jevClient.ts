@@ -22,15 +22,37 @@ export function parseJevBoxes(value: unknown): NormalizedBox[] {
     throw new Error('Invalid Jev presence answer.');
   }
   if (present.noul < 0.5) return [];
-  if (!isRecord(target) || target.type !== 'box' || !isRecord(target.box)) {
+  return [parseBoxAnswer(target)];
+}
+
+function parseBoxAnswer(answer: unknown): NormalizedBox {
+  if (!isRecord(answer) || answer.type !== 'box' || !isRecord(answer.box)) {
     throw new Error('Invalid Jev box answer.');
   }
-  const { left, top, right, bottom } = target.box;
+  const { left, top, right, bottom } = answer.box;
   if (!isProbability(left) || !isProbability(top) || !isProbability(right) || !isProbability(bottom) ||
       left >= right || top >= bottom) {
     throw new Error('Invalid Jev box coordinates.');
   }
-  return [{ left, top, right, bottom }];
+  return { left, top, right, bottom };
+}
+
+export function parseJevCount(value: unknown): number {
+  if (!isRecord(value) || !isRecord(value.answers) || !isRecord(value.answers.count)) {
+    throw new Error('Invalid Jev count answer.');
+  }
+  const answer = value.answers.count;
+  if (answer.type !== 'choice' || typeof answer.choice !== 'string' || !/^count_[0-6]$/.test(answer.choice)) {
+    throw new Error('Invalid Jev count choice.');
+  }
+  return Number(answer.choice.slice('count_'.length));
+}
+
+export function parseJevScrollBoxes(value: unknown, count: number): NormalizedBox[] {
+  if (!Number.isInteger(count) || count < 1 || count > 6) throw new RangeError('Box count must be between 1 and 6.');
+  if (!isRecord(value) || !isRecord(value.answers)) throw new Error('Invalid Jev response.');
+  const answers = value.answers;
+  return Array.from({ length: count }, (_, index) => parseBoxAnswer(answers[`target_${index + 1}`]));
 }
 
 export function encodeFrame(frame: ImageData): Promise<Blob> {
@@ -57,9 +79,13 @@ export function encodeFrame(frame: ImageData): Promise<Blob> {
   });
 }
 
-export const detectJevBoxes: FrameDetector = async (frame, object, signal) => {
-  signal.throwIfAborted();
-  const image = await encodeFrame(frame);
+type JevQuestion = {
+  type: 'noul' | 'box' | 'choice';
+  instructions: string;
+  criteria?: Record<string, string>;
+};
+
+async function requestJev(image: Blob, questions: Record<string, JevQuestion>, signal: AbortSignal): Promise<unknown> {
   signal.throwIfAborted();
   const reference = crypto.randomUUID();
   const body = new FormData();
@@ -67,10 +93,7 @@ export const detectJevBoxes: FrameDetector = async (frame, object, signal) => {
     model: 'jev-preview',
     state: { photo: reference },
     assets: { [reference]: { type: 'image', part: 'frame' } },
-    questions: {
-      present: { type: 'noul', instructions: `Is the following object visible in \`photo\`? ${object}` },
-      target: { type: 'box', instructions: `Find one object matching this description in \`photo\`: ${object}` },
-    },
+    questions,
   })], { type: 'application/json' }));
   body.append('frame', image, 'frame.png');
 
@@ -80,5 +103,45 @@ export const detectJevBoxes: FrameDetector = async (frame, object, signal) => {
     if (response.status === 504) throw new Error('The Jev request timed out. Start the camera to retry.');
     throw new Error(`Jev request failed (HTTP ${response.status}). Start the camera to retry.`);
   }
-  return parseJevBoxes(await response.json());
+  const result: unknown = await response.json();
+  signal.throwIfAborted();
+  return result;
+}
+
+export const detectJevBoxes: FrameDetector = async (frame, object, signal) => {
+  signal.throwIfAborted();
+  const image = await encodeFrame(frame);
+  return parseJevBoxes(await requestJev(image, {
+    present: { type: 'noul', instructions: `Is the following object visible in \`photo\`? ${object}` },
+    target: { type: 'box', instructions: `Find one object matching this description in \`photo\`: ${object}` },
+  }, signal));
+};
+
+export const detectJevScrollBoxes: FrameDetector = async (frame, object, signal) => {
+  signal.throwIfAborted();
+  const image = await encodeFrame(frame);
+  const criteria = Object.fromEntries(Array.from({ length: 7 }, (_, count) => [
+    `count_${count}`,
+    count === 6 ? 'Six or more matching objects are visible.' : `Exactly ${count} matching objects are visible.`,
+  ]));
+  const count = parseJevCount(await requestJev(image, {
+    count: {
+      type: 'choice',
+      instructions: `How many distinct objects matching this description are visible in \`photo\`? ${object}`,
+      criteria,
+    },
+  }, signal));
+  if (count === 0) return [];
+
+  const questions: Record<string, JevQuestion> = {};
+  for (let position = 1; position <= count; position++) {
+    questions[`target_${position}`] = {
+      type: 'box',
+      instructions: `Find matching object number ${position} of ${count} in \`photo\` (1-based). ` +
+        'Order matching objects from top to bottom by their top edge, breaking ties from left to right by their left edge. ' +
+        'Return the box for only this position, not the group. ' +
+        `Object description: ${object}`,
+    };
+  }
+  return parseJevScrollBoxes(await requestJev(image, questions, signal), count);
 };

@@ -83,4 +83,5 @@ Jev는 벤치마크 상 GPT 5.6 Terra에 버금가는 지능을 가지고 있습
 - [Jev Box Primitives](https://docs.typesafe.ai/primitives/box)
 - [Jev Images Doc](https://docs.typesafe.ai/images)
 - [Detecting meaning in RSVP at 13 ms per picture](https://link.springer.com/article/10.3758/s13414-013-0605-z)
-
+- [Introducing System One Models and Jev](https://typesafe.ai/blog/introducing-system-one-models-and-jev)
+- [N8 Programs's jev benchmark vs GPT 5.6 Terra](https://x.com/N8Programs/status/2100088523403432357)
