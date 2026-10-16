@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { FrameCanvas } from './components/FrameCanvas';
+import { DetectionLatency } from './components/DetectionLatency';
 import { useWebcamProcessor } from './hooks/useWebcamProcessor';
 import { useLocale } from './i18n';
 import { processorDefinitions } from './processors/registry';
@@ -91,6 +92,7 @@ export function App() {
       </div>
 
       <p className="workspace-note">{definition.requiresObject ? messages.remoteProcessing : messages.localProcessing}</p>
+      <DetectionLatency processor={processor} locale={locale} messages={messages.latency} />
       <video ref={camera.videoRef} muted playsInline hidden />
     </main>
   );
