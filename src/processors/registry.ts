@@ -36,8 +36,8 @@ export const processorDefinitions: readonly ProcessorDefinition[] = [
     id: 'jev-scroll',
     label: 'Jev · Scroll decision',
     description: {
-      en: 'Counts matching objects with Jev and mosaics up to six, ordered from top-left to bottom-right.',
-      ko: 'Jev로 객체 수를 확인하고 좌상단부터 우하단 순으로 최대 6개를 모자이크합니다.',
+      en: 'Counts once, then probes one more object than last detected, up to six.',
+      ko: '최초 개수 확인 후 이전 검출 수보다 하나 더 요청하며 최대 6개를 모자이크합니다.',
     },
     create: () => new JevScroll(),
     requiresObject: true,

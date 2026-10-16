@@ -6,6 +6,7 @@ export class JevProcessor implements Processor {
   private object = '';
   private generation = 0;
   private boxes: NormalizedBox[] = [];
+  private hasDetection = false;
   private pending: AbortController | null = null;
   private failure: Error | null = null;
   private width = 0;
@@ -53,6 +54,7 @@ export class JevProcessor implements Processor {
     this.generation++;
     this.pending?.abort();
     this.boxes = [];
+    this.hasDetection = false;
     this.failure = null;
     this.object = '';
     this.width = 0;
@@ -78,9 +80,10 @@ export class JevProcessor implements Processor {
   private async request(frame: ImageData, object: string, controller: AbortController, generation: number) {
     const startedAt = performance.now();
     try {
-      const boxes = await this.detect(frame, object, controller.signal);
+      const boxes = await this.detect(frame, object, controller.signal, this.hasDetection ? this.boxes.length : undefined);
       if (generation === this.generation && !controller.signal.aborted) {
         this.boxes = boxes;
+        this.hasDetection = true;
         this.setDetectionLatency(performance.now() - startedAt);
       }
     } catch (error) {

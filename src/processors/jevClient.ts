@@ -5,7 +5,12 @@ export interface NormalizedBox {
   bottom: number;
 }
 
-export type FrameDetector = (frame: ImageData, object: string, signal: AbortSignal) => Promise<NormalizedBox[]>;
+export type FrameDetector = (
+  frame: ImageData,
+  object: string,
+  signal: AbortSignal,
+  previousCount?: number,
+) => Promise<NormalizedBox[]>;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -18,11 +23,15 @@ function isProbability(value: unknown): value is number {
 export function parseJevBoxes(value: unknown): NormalizedBox[] {
   if (!isRecord(value) || !isRecord(value.answers)) throw new Error('Invalid Jev response.');
   const { present, target } = value.answers;
-  if (!isRecord(present) || present.type !== 'noul' || !isProbability(present.noul)) {
+  if (!parsePresenceAnswer(present)) return [];
+  return [parseBoxAnswer(target)];
+}
+
+function parsePresenceAnswer(answer: unknown): boolean {
+  if (!isRecord(answer) || answer.type !== 'noul' || !isProbability(answer.noul)) {
     throw new Error('Invalid Jev presence answer.');
   }
-  if (present.noul < 0.5) return [];
-  return [parseBoxAnswer(target)];
+  return answer.noul >= 0.5;
 }
 
 function parseBoxAnswer(answer: unknown): NormalizedBox {
@@ -52,7 +61,13 @@ export function parseJevScrollBoxes(value: unknown, count: number): NormalizedBo
   if (!Number.isInteger(count) || count < 1 || count > 6) throw new RangeError('Box count must be between 1 and 6.');
   if (!isRecord(value) || !isRecord(value.answers)) throw new Error('Invalid Jev response.');
   const answers = value.answers;
-  return Array.from({ length: count }, (_, index) => parseBoxAnswer(answers[`target_${index + 1}`]));
+  const boxes: NormalizedBox[] = [];
+  for (let position = 1; position <= count; position++) {
+    if (parsePresenceAnswer(answers[`present_${position}`])) {
+      boxes.push(parseBoxAnswer(answers[`target_${position}`]));
+    }
+  }
+  return boxes;
 }
 
 export function encodeFrame(frame: ImageData): Promise<Blob> {
@@ -117,28 +132,42 @@ export const detectJevBoxes: FrameDetector = async (frame, object, signal) => {
   }, signal));
 };
 
-export const detectJevScrollBoxes: FrameDetector = async (frame, object, signal) => {
+export const detectJevScrollBoxes: FrameDetector = async (frame, object, signal, previousCount) => {
   signal.throwIfAborted();
+  if (previousCount !== undefined && (!Number.isInteger(previousCount) || previousCount < 0 || previousCount > 6)) {
+    throw new RangeError('Previous box count must be between 0 and 6.');
+  }
   const image = await encodeFrame(frame);
-  const criteria = Object.fromEntries(Array.from({ length: 7 }, (_, count) => [
-    `count_${count}`,
-    count === 6 ? 'Six or more matching objects are visible.' : `Exactly ${count} matching objects are visible.`,
-  ]));
-  const count = parseJevCount(await requestJev(image, {
-    count: {
-      type: 'choice',
-      instructions: `How many distinct objects matching this description are visible in \`photo\`? ${object}`,
-      criteria,
-    },
-  }, signal));
+  let count: number;
+  if (previousCount === undefined) {
+    const criteria = Object.fromEntries(Array.from({ length: 7 }, (_, option) => [
+      `count_${option}`,
+      option === 6 ? 'Six or more matching objects are visible.' : `Exactly ${option} matching objects are visible.`,
+    ]));
+    count = parseJevCount(await requestJev(image, {
+      count: {
+        type: 'choice',
+        instructions: `How many distinct objects matching this description are visible in \`photo\`? ${object}`,
+        criteria,
+      },
+    }, signal));
+  } else {
+    count = Math.min(previousCount + 1, 6);
+  }
   if (count === 0) return [];
 
   const questions: Record<string, JevQuestion> = {};
+  const ordering = 'Order matching objects from top to bottom by their top edge, breaking ties from left to right by their left edge. ';
   for (let position = 1; position <= count; position++) {
+    questions[`present_${position}`] = {
+      type: 'noul',
+      instructions: `Does a distinct matching object at position ${position} (1-based) exist in \`photo\`? ` +
+        ordering + `Object description: ${object}`,
+    };
     questions[`target_${position}`] = {
       type: 'box',
-      instructions: `Find matching object number ${position} of ${count} in \`photo\` (1-based). ` +
-        'Order matching objects from top to bottom by their top edge, breaking ties from left to right by their left edge. ' +
+      instructions: `Find the matching object at position ${position} (1-based) in \`photo\`. ` +
+        ordering +
         'Return the box for only this position, not the group. ' +
         `Object description: ${object}`,
     };

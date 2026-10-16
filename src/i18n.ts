@@ -20,7 +20,7 @@ const english = {
   localProcessing: 'Frames are processed locally in your browser.',
   latency: {
     label: 'Detection latency',
-    hint: 'Last completed detection cycle, including image encoding and API round trips. Scroll includes both count and box requests.',
+    hint: 'Last completed detection cycle, including image encoding and API round trips. Scroll counts objects only on its first cycle.',
   },
   status: {
     idle: 'Idle',
@@ -64,7 +64,7 @@ const korean: Messages = {
   localProcessing: '프레임은 브라우저 안에서 처리됩니다.',
   latency: {
     label: '검출 지연',
-    hint: '이미지 인코딩과 API 왕복을 포함한 최근 완료 검출 시간입니다. Scroll은 개수와 Box 요청을 모두 포함합니다.',
+    hint: '이미지 인코딩과 API 왕복을 포함한 최근 완료 검출 시간입니다. Scroll은 최초 주기에만 객체 수를 확인합니다.',
   },
   status: {
     idle: '대기 중',
