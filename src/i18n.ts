@@ -20,7 +20,9 @@ const english = {
   localProcessing: 'Frames are processed locally in your browser.',
   latency: {
     label: 'Detection latency',
-    hint: 'Last completed detection cycle, including image encoding and API round trips. Scroll counts objects only on its first cycle.',
+    samples: 'Samples',
+    smallSample: 'Fewer than 100 samples; p99 is the maximum.',
+    hint: 'Latest and nearest-rank percentiles of the last 1,000 successful detection cycles, including encoding and API round trips. Resets with the camera, target, frame size or processor. Scroll counts objects only on its first cycle.',
   },
   status: {
     idle: 'Idle',
@@ -64,7 +66,9 @@ const korean: Messages = {
   localProcessing: '프레임은 브라우저 안에서 처리됩니다.',
   latency: {
     label: '검출 지연',
-    hint: '이미지 인코딩과 API 왕복을 포함한 최근 완료 검출 시간입니다. Scroll은 최초 주기에만 객체 수를 확인합니다.',
+    samples: '표본 수',
+    smallSample: '표본 100개 미만: p99는 최댓값입니다.',
+    hint: '인코딩과 API 왕복을 포함한 최근 성공 검출 1,000개의 최신값과 최근접 순위 백분위수입니다. 카메라·대상·프레임 크기·프로세서 변경 시 초기화합니다. Scroll은 최초 주기에만 객체 수를 확인합니다.',
   },
   status: {
     idle: '대기 중',

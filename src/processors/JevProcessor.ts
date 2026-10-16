@@ -1,4 +1,6 @@
 import { mosaicRegion } from '../helpers/mosaic';
+import { detectionLatencyWindowSize, summarizeDetectionLatencies } from '../helpers/detectionLatency';
+import type { DetectionLatencyStatistics } from '../helpers/detectionLatency';
 import type { Processor } from './Processor';
 import { getJevTraceId } from './jevClient';
 import type { FrameDetector, NormalizedBox } from './jevClient';
@@ -12,7 +14,8 @@ export class JevProcessor implements Processor {
   private failure: Error | null = null;
   private width = 0;
   private height = 0;
-  private detectionLatencyMs: number | null = null;
+  private readonly detectionLatencies: number[] = [];
+  private detectionLatencyStatistics: DetectionLatencyStatistics | null = null;
   private readonly latencyListeners = new Set<() => void>();
   private readonly detect: FrameDetector;
   private readonly blockSize: number;
@@ -64,7 +67,11 @@ export class JevProcessor implements Processor {
   }
 
   getDetectionLatencyMs(): number | null {
-    return this.detectionLatencyMs;
+    return this.detectionLatencyStatistics?.latestMs ?? null;
+  }
+
+  getDetectionLatencyStatistics(): DetectionLatencyStatistics | null {
+    return this.detectionLatencyStatistics;
   }
 
   subscribeDetectionLatency(listener: () => void): () => void {
@@ -73,8 +80,15 @@ export class JevProcessor implements Processor {
   }
 
   private setDetectionLatency(latencyMs: number | null): void {
-    if (this.detectionLatencyMs === latencyMs) return;
-    this.detectionLatencyMs = latencyMs;
+    if (latencyMs === null) {
+      if (this.detectionLatencyStatistics === null) return;
+      this.detectionLatencies.length = 0;
+      this.detectionLatencyStatistics = null;
+    } else {
+      this.detectionLatencies.push(latencyMs);
+      if (this.detectionLatencies.length > detectionLatencyWindowSize) this.detectionLatencies.shift();
+      this.detectionLatencyStatistics = summarizeDetectionLatencies(this.detectionLatencies);
+    }
     this.latencyListeners.forEach((listener) => listener());
   }
 
@@ -93,6 +107,7 @@ export class JevProcessor implements Processor {
           frameHeight: frame.height,
           boxCount: boxes.length,
           detectionLatencyMs: Math.round(detectionLatencyMs),
+          latencyStatistics: this.detectionLatencyStatistics,
           boxes: boxes.map((box) => ({ ...box })),
           pixelBoxes: boxes.map((box) => ({
             x: box.left * frame.width,
