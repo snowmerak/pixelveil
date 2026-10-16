@@ -89,6 +89,17 @@ Box에는 ‘없음’ 응답이 없으므로 단순한 Box 응답 수를 실제
 
 다음 요청이 진행 중이어도 최근 완료 값을 유지합니다. 첫 응답 전, Dummy 선택, 대상·프레임 크기 변경, 카메라 중지·프로세서 교체 시에는 `—`로 표시합니다. 취소·실패·이전 세대 응답은 새 측정값으로 반영하지 않습니다. 표시값은 검출 완료·초기화 시에만 구독을 통해 갱신하므로 매 프레임 React 렌더링을 유발하지 않습니다.
 
+## Jev 응답 로그
+
+브라우저 개발자 도구(F12)의 **Console**에서 `[Pixelveil][Jev]`로 필터링합니다. 기본 Info 로그 수준에서 볼 수 있으며 서버 터미널이 아닌 브라우저 콘솔에 출력됩니다.
+
+- `response <requestId>` 그룹: 펼치면 요청 시간(`requestLatencyMs`), Choice 결과(`countChoice`), 요청·채택 bbox 수와 좌표 표를 볼 수 있습니다. 좌표는 API의 정규화 값(0~1)이며, `confidence`와 순번별 존재 확률(`presence`)도 함께 표시합니다.
+- 표의 `disposition`: `accepted`는 검증·존재 판정을 통과한 슬롯, `absent`는 존재 확률 0.5 미만, `invalid`는 응답 누락·잘못된 값, `ignored_cancelled`는 취소된 요청의 응답입니다. `invalid` 슬롯이 있으면 응답 전체가 실패할 수 있으므로 `accepted` 표시는 최종 적용 여부와 다릅니다.
+- `boxes_applied`: 실제 bbox 캐시에 반영한 정규화 좌표(`boxes`), 원본 프레임 기준 픽셀 좌표(`pixelBoxes`), 개수(`boxCount`), 프레임 크기, 전체 검출 시간(`detectionLatencyMs`)입니다. 픽셀 좌표는 모자이크 헬퍼의 반올림·경계 처리 전 값입니다. 같은 검출 주기의 개수·Box 응답과 적용 결과는 `traceId`로 연결됩니다. HTTP 요청마다 `requestId`는 다릅니다.
+- `response_error` / `invalid_response`: HTTP 오류 상태나 JSON 해석 실패를 확인합니다.
+
+로그는 요청 응답·검출 완료 시에만 출력하며 드롭되는 프레임마다 기록하지 않습니다. 이미지·대상 설명·API 키·인증 헤더는 기록하지 않고, 좌표 등 필요한 숫자 필드만 출력합니다. 별도 파일이나 서버에 저장하지 않으며 브라우저 콘솔을 지우거나 페이지를 닫아 정리할 수 있습니다.
+
 ## 영역 모자이크 헬퍼
 
 `mosaicRegion(frame, bboxes, blockSize = 12)`는 bbox 배열을 받아 각 영역 내부의 블록을 RGB 평균색으로 채웁니다. 입력 `ImageData`를 **직접 변경하고 같은 객체를 반환**하므로 프로세서의 `process` 안에서 바로 사용할 수 있습니다. 알파값과 모든 bbox 밖 픽셀은 유지합니다.

@@ -1,5 +1,6 @@
 import { mosaicRegion } from '../helpers/mosaic';
 import type { Processor } from './Processor';
+import { getJevTraceId } from './jevClient';
 import type { FrameDetector, NormalizedBox } from './jevClient';
 
 export class JevProcessor implements Processor {
@@ -84,7 +85,22 @@ export class JevProcessor implements Processor {
       if (generation === this.generation && !controller.signal.aborted) {
         this.boxes = boxes;
         this.hasDetection = true;
-        this.setDetectionLatency(performance.now() - startedAt);
+        const detectionLatencyMs = performance.now() - startedAt;
+        this.setDetectionLatency(detectionLatencyMs);
+        console.info('[Pixelveil][Jev] boxes_applied', {
+          traceId: getJevTraceId(controller.signal),
+          frameWidth: frame.width,
+          frameHeight: frame.height,
+          boxCount: boxes.length,
+          detectionLatencyMs: Math.round(detectionLatencyMs),
+          boxes: boxes.map((box) => ({ ...box })),
+          pixelBoxes: boxes.map((box) => ({
+            x: box.left * frame.width,
+            y: box.top * frame.height,
+            width: (box.right - box.left) * frame.width,
+            height: (box.bottom - box.top) * frame.height,
+          })),
+        });
       }
     } catch (error) {
       if (generation === this.generation && !controller.signal.aborted) {

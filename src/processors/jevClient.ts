@@ -12,6 +12,17 @@ export type FrameDetector = (
   previousCount?: number,
 ) => Promise<NormalizedBox[]>;
 
+const detectionTraces = new WeakMap<AbortSignal, string>();
+
+export function getJevTraceId(signal: AbortSignal): string {
+  let traceId = detectionTraces.get(signal);
+  if (!traceId) {
+    traceId = crypto.randomUUID();
+    detectionTraces.set(signal, traceId);
+  }
+  return traceId;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -100,6 +111,58 @@ type JevQuestion = {
   criteria?: Record<string, string>;
 };
 
+function logNumber(value: unknown): number | null {
+  return typeof value === 'number' ? value : null;
+}
+
+function logJevResponse(requestId: string, questions: Record<string, JevQuestion>, result: unknown, signal: AbortSignal, requestLatencyMs: number) {
+  const answers = isRecord(result) && isRecord(result.answers) ? result.answers : {};
+  const rows = Object.entries(questions).filter(([, question]) => question.type === 'box').map(([question]) => {
+    const answer = answers[question];
+    const box = isRecord(answer) && isRecord(answer.box) ? answer.box : {};
+    const presence = answers[question.replace(/^target/, 'present')];
+    let disposition: string;
+    try {
+      if (!parsePresenceAnswer(presence)) disposition = 'absent';
+      else {
+        parseBoxAnswer(answer);
+        disposition = 'accepted';
+      }
+    } catch {
+      disposition = 'invalid';
+    }
+    return {
+      question,
+      left: logNumber(box.left),
+      top: logNumber(box.top),
+      right: logNumber(box.right),
+      bottom: logNumber(box.bottom),
+      confidence: isRecord(answer) ? logNumber(answer.confidence) : null,
+      presence: isRecord(presence) ? logNumber(presence.noul) : null,
+      disposition: signal.aborted ? 'ignored_cancelled' : disposition,
+    };
+  });
+  const countAnswer = answers.count;
+  const countChoice = isRecord(countAnswer) && countAnswer.type === 'choice' &&
+    typeof countAnswer.choice === 'string' && /^count_[0-6]$/.test(countAnswer.choice) ? countAnswer.choice : null;
+
+  console.groupCollapsed(`[Pixelveil][Jev] response ${requestId}`);
+  console.info('[Pixelveil][Jev] response', {
+    event: 'jev_response',
+    timestamp: new Date().toISOString(),
+    traceId: getJevTraceId(signal),
+    requestId,
+    requestLatencyMs: Math.round(requestLatencyMs),
+    cancelled: signal.aborted,
+    countChoice,
+    requestedBoxes: rows.length,
+    acceptedBoxes: rows.filter((row) => row.disposition === 'accepted').length,
+    boxes: rows,
+  });
+  if (rows.length > 0) console.table(rows);
+  console.groupEnd();
+}
+
 async function requestJev(image: Blob, questions: Record<string, JevQuestion>, signal: AbortSignal): Promise<unknown> {
   signal.throwIfAborted();
   const reference = crypto.randomUUID();
@@ -112,13 +175,33 @@ async function requestJev(image: Blob, questions: Record<string, JevQuestion>, s
   })], { type: 'application/json' }));
   body.append('frame', image, 'frame.png');
 
+  const startedAt = performance.now();
   const response = await fetch('/api/jev', { method: 'POST', body, signal });
   if (!response.ok) {
+    console.warn('[Pixelveil][Jev] response_error', {
+      traceId: getJevTraceId(signal),
+      requestId: reference,
+      status: response.status,
+      requestLatencyMs: Math.round(performance.now() - startedAt),
+    });
     if (response.status === 503) throw new Error('Set TYPESAFE_API_KEY in .env.local and restart Vite.');
     if (response.status === 504) throw new Error('The Jev request timed out. Start the camera to retry.');
     throw new Error(`Jev request failed (HTTP ${response.status}). Start the camera to retry.`);
   }
-  const result: unknown = await response.json();
+  let result: unknown;
+  try {
+    result = await response.json();
+  } catch (error) {
+    if (!signal.aborted) {
+      console.warn('[Pixelveil][Jev] invalid_response', {
+        traceId: getJevTraceId(signal),
+        requestId: reference,
+        status: response.status,
+      });
+    }
+    throw error;
+  }
+  logJevResponse(reference, questions, result, signal, performance.now() - startedAt);
   signal.throwIfAborted();
   return result;
 }
