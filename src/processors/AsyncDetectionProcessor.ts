@@ -6,12 +6,24 @@ import type { Processor } from './Processor';
 import { getDetectionTraceId } from './FrameDetector';
 import type { FrameDetector, NormalizedBox } from './FrameDetector';
 import type { FrameGate, FrameGateStatistics } from './FrameGate';
+import { MotionTracker } from '../tracking/MotionTracker';
+import type { TrackingStatistics } from '../tracking/MotionTracker';
+
+interface CapturedFrame {
+  id: number;
+  capturedAtMs: number;
+  image: ImageData;
+}
 
 export class AsyncDetectionProcessor implements Processor {
   private object = '';
   private generation = 0;
   private boxes: NormalizedBox[] = [];
   private hasDetection = false;
+  private previousDetectionCount = 0;
+  private frameId = 0;
+  private trackingEnabled = true;
+  private lastHeldBoxes = 0;
   private pending: AbortController | null = null;
   private failure: Error | null = null;
   private width = 0;
@@ -23,6 +35,7 @@ export class AsyncDetectionProcessor implements Processor {
   private readonly blockSize: number;
   private frameGate: FrameGate | null = null;
   private unsubscribeGate: (() => void) | null = null;
+  private readonly tracker = new MotionTracker(() => this.latencyListeners.forEach((listener) => listener()));
 
   constructor(
     detect: FrameDetector,
@@ -48,11 +61,27 @@ export class AsyncDetectionProcessor implements Processor {
     if (!description) return inputFrame;
     if (this.failure) throw this.failure;
 
+    const frameId = ++this.frameId;
+    const capturedAtMs = performance.now();
+    if (this.trackingEnabled) {
+      this.tracker.advance(inputFrame, frameId, capturedAtMs);
+      this.boxes = this.tracker.getBoxes();
+      const tracking = this.tracker.getStatistics();
+      if (tracking.heldBoxes > this.lastHeldBoxes) {
+        recordDetectionDiagnostic({
+          event: 'tracking_lost', provider: this.provider, ...this.diagnosticContext,
+          frameId, detectionFrameId: tracking.detectionFrameId, heldBoxes: tracking.heldBoxes,
+          reason: 'motion_unreliable_holding_last_coordinates',
+        });
+      }
+      this.lastHeldBoxes = tracking.heldBoxes;
+    }
+
     if (!this.pending) {
       const controller = new AbortController();
       const generation = this.generation;
       this.pending = controller;
-      void this.request(inputFrame, description, controller, generation);
+      void this.request({ id: frameId, capturedAtMs, image: inputFrame }, description, controller, generation);
     }
 
     return mosaicRegion(inputFrame, this.boxes.map((box) => ({
@@ -68,11 +97,14 @@ export class AsyncDetectionProcessor implements Processor {
     this.pending?.abort();
     this.boxes = [];
     this.hasDetection = false;
+    this.previousDetectionCount = 0;
+    this.lastHeldBoxes = 0;
     this.failure = null;
     this.object = '';
     this.width = 0;
     this.height = 0;
     this.frameGate?.reset();
+    this.tracker.reset();
     this.setDetectionLatency(null);
   }
 
@@ -87,6 +119,17 @@ export class AsyncDetectionProcessor implements Processor {
 
   getFrameGateStatistics(): FrameGateStatistics | null {
     return this.frameGate?.getStatistics() ?? null;
+  }
+
+  setTrackingEnabled(enabled: boolean): void {
+    if (this.trackingEnabled === enabled) return;
+    this.reset();
+    this.trackingEnabled = enabled;
+    this.latencyListeners.forEach((listener) => listener());
+  }
+
+  getTrackingStatistics(): TrackingStatistics | null {
+    return this.trackingEnabled ? this.tracker.getStatistics() : null;
   }
 
   getDetectionLatencyMs(): number | null {
@@ -120,10 +163,12 @@ export class AsyncDetectionProcessor implements Processor {
     this.latencyListeners.forEach((listener) => listener());
   }
 
-  private async request(frame: ImageData, object: string, controller: AbortController, generation: number) {
+  private async request(source: CapturedFrame, object: string, controller: AbortController, generation: number) {
     const startedAt = performance.now();
     try {
-      const detectionFrame = this.frameGate ? new ImageData(new Uint8ClampedArray(frame.data), frame.width, frame.height) : frame;
+      const detectionFrame = new ImageData(new Uint8ClampedArray(source.image.data), source.image.width, source.image.height);
+      source.image = detectionFrame;
+      const frame = detectionFrame;
       if (this.frameGate) {
         let passed: boolean;
         try {
@@ -134,24 +179,39 @@ export class AsyncDetectionProcessor implements Processor {
         if (generation !== this.generation || controller.signal.aborted) return;
         if (!passed) {
           this.boxes = [];
+          this.previousDetectionCount = 0;
+          this.tracker.clear();
           recordDetectionDiagnostic({
             event: 'frame_skipped', provider: this.provider, ...this.diagnosticContext,
             traceId: getDetectionTraceId(controller.signal), reason: 'embedding_below_threshold',
             latencyMs: performance.now() - startedAt, boxCount: 0,
+            sourceFrameId: source.id, sourceCapturedAtMs: source.capturedAtMs, currentFrameId: this.frameId,
           });
           return;
         }
       }
-      const boxes = await this.detect(detectionFrame, object, controller.signal, this.hasDetection ? this.boxes.length : undefined);
+      const detectedBoxes = await this.detect(detectionFrame, object, controller.signal, this.hasDetection ? this.previousDetectionCount : undefined);
       if (generation === this.generation && !controller.signal.aborted) {
-        this.boxes = boxes;
+        const detectorLatencyMs = performance.now() - startedAt;
+        const correction = this.trackingEnabled ? await this.tracker.correct(source.id, detectedBoxes, controller.signal) : null;
+        if (generation !== this.generation || controller.signal.aborted) return;
+        this.boxes = this.trackingEnabled ? this.tracker.getBoxes() : detectedBoxes;
+        const boxes = this.boxes;
         this.hasDetection = true;
+        this.previousDetectionCount = detectedBoxes.length;
         const detectionLatencyMs = performance.now() - startedAt;
         this.setDetectionLatency(detectionLatencyMs);
         const diagnostic = {
           ...this.diagnosticContext,
           provider: this.provider,
           traceId: getDetectionTraceId(controller.signal),
+          sourceFrameId: source.id,
+          sourceCapturedAtMs: source.capturedAtMs,
+          appliedFrameId: correction ? correction.appliedFrameId : this.frameId,
+          detectorLatencyMs,
+          trackingCorrection: correction,
+          detectedBoxCount: detectedBoxes.length,
+          detectedBoxes: detectedBoxes.map((box) => ({ ...box })),
           frameWidth: frame.width,
           frameHeight: frame.height,
           boxCount: boxes.length,
@@ -165,8 +225,9 @@ export class AsyncDetectionProcessor implements Processor {
             height: (box.bottom - box.top) * frame.height,
           })),
         };
-        recordDetectionDiagnostic({ event: 'boxes_applied', ...diagnostic });
-        console.info(`[Pixelveil][${this.provider}] boxes_applied`, diagnostic);
+        const event = correction && correction.status !== 'applied' ? 'detection_not_applied' : 'boxes_applied';
+        recordDetectionDiagnostic({ event, ...diagnostic });
+        console.info(`[Pixelveil][${this.provider}] ${event}`, diagnostic);
       }
     } catch (error) {
       if (generation === this.generation && !controller.signal.aborted && !this.isRecoverableError(error)) {

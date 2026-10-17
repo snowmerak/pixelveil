@@ -10,7 +10,7 @@
 .workspace {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 32px 32px 440px;
+  padding: 32px;
 }
 
 .workspace-header,
@@ -97,19 +97,27 @@
   gap: 8px;
 }
 
+.tracking-settings {
+  display: grid;
+  gap: 8px;
+  flex: 1 1 100%;
+  font-size: 0.875rem;
+}
+
+.tracking-details summary {
+  cursor: pointer;
+}
+
+.tracking-details > * + * {
+  margin-top: 8px;
+}
+
 .embedding-settings p {
   grid-column: 1 / -1;
 }
 
 .embedding-settings input {
   accent-color: var(--mp-text-primary);
-}
-
-.embedding-latency {
-  display: grid;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid var(--mp-text-muted);
 }
 
 .frame-grid {
@@ -167,20 +175,30 @@
 }
 
 .detection-latency {
-  position: fixed;
-  right: 20px;
-  bottom: 20px;
   display: grid;
-  gap: 8px;
-  max-width: calc(100vw - 40px);
-  max-height: calc(100dvh - 40px);
-  overflow-y: auto;
-  padding: 12px 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  align-items: start;
+  gap: 24px;
+  margin-top: 24px;
+  padding: 20px;
   border-radius: 8px;
   background: var(--mp-bg-elevated);
   color: var(--mp-text-secondary);
   box-shadow: var(--mp-shadow-panel);
   font-size: 0.75rem;
+}
+
+.detection-latency__section {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.detection-latency__actions {
+  display: flex;
+  justify-content: flex-end;
+  grid-column: 1 / -1;
 }
 
 .detection-latency__header {
@@ -214,7 +232,7 @@
 
 @media (max-width: 800px) {
   .workspace {
-    padding: 20px 16px 440px;
+    padding: 20px 16px;
   }
 
   .frame-grid {

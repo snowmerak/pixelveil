@@ -14,6 +14,7 @@ export function App() {
   const [object, setObject] = useState('');
   const [vlmModel, setVlmModel] = useState<VlmModel>(vlmModels[0]);
   const [embeddingEnabled, setEmbeddingEnabled] = useState(false);
+  const [trackingEnabled, setTrackingEnabled] = useState(true);
   const [embeddingThreshold, setEmbeddingThreshold] = useState(defaultEmbeddingThreshold);
   const definition = processorDefinitions.find((entry) => entry.id === processorId) ?? processorDefinitions[0];
   const selectedModel = definition.requiresVlmModel ? vlmModel : undefined;
@@ -21,9 +22,10 @@ export function App() {
   const selectedThreshold = useEmbedding ? embeddingThreshold : null;
   const processor = useMemo(() => {
     const created = definition.create(selectedModel);
+    created.setTrackingEnabled?.(trackingEnabled);
     if (selectedThreshold !== null) created.setFrameGate?.(new EmbeddingGate(selectedThreshold));
     return created;
-  }, [definition, selectedModel, selectedThreshold]);
+  }, [definition, selectedModel, selectedThreshold, trackingEnabled]);
   const camera = useWebcamProcessor(processor, object);
   const running = camera.status === 'running';
   const active = running || camera.status === 'requesting';
@@ -122,6 +124,16 @@ export function App() {
             <p id="embedding-hint" className="mp-text--muted">{messages.embedding.hint}</p>
           </div>
         )}
+        {definition.requiresObject && (
+          <div className="tracking-settings">
+            <label className="embedding-toggle" htmlFor="tracking-enabled">
+              <input id="tracking-enabled" type="checkbox" checked={trackingEnabled}
+                onChange={(event) => setTrackingEnabled(event.target.checked)} />
+              {messages.tracking.enable}
+            </label>
+            <p className="mp-text--muted">{messages.tracking.hint}</p>
+          </div>
+        )}
       </section>
 
       {camera.error && (
@@ -139,7 +151,8 @@ export function App() {
       <p className="workspace-note">{definition.requiresVlmModel ? messages.vlmProcessing :
         definition.requiresObject ? messages.remoteProcessing : messages.localProcessing}</p>
       {useEmbedding && <p className="workspace-note">{messages.embedding.remoteProcessing}</p>}
-      <DetectionLatency processor={processor} locale={locale} messages={messages.latency} embeddingMessages={messages.embedding} />
+      <DetectionLatency processor={processor} locale={locale} messages={messages.latency}
+        embeddingMessages={messages.embedding} trackingMessages={messages.tracking} />
       <video ref={camera.videoRef} muted playsInline hidden />
     </main>
   );
