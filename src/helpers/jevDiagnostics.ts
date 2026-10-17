@@ -4,7 +4,7 @@ const events: Record<string, unknown>[] = [];
 const listeners = new Set<() => void>();
 let recordedEventCount = 0;
 
-export function recordJevDiagnostic(event: Record<string, unknown> & { event: string }): void {
+export function recordDetectionDiagnostic(event: Record<string, unknown> & { event: string }): void {
   recordedEventCount++;
   events.push({
     ...structuredClone(event),
@@ -14,6 +14,8 @@ export function recordJevDiagnostic(event: Record<string, unknown> & { event: st
   if (events.length > eventLimit) events.shift();
   listeners.forEach((listener) => listener());
 }
+
+export const recordJevDiagnostic = recordDetectionDiagnostic;
 
 export function subscribeJevDiagnostics(listener: () => void): () => void {
   listeners.add(listener);
@@ -42,7 +44,8 @@ export function downloadJevLogs(): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  link.download = `pixelveil-jev-${report.exportedAt.replace(/[:.]/g, '-')}.json`;
+  const source = report.events.some((event) => event.provider === 'VLM') ? 'detection' : 'jev';
+  link.download = `pixelveil-${source}-${report.exportedAt.replace(/[:.]/g, '-')}.json`;
   document.body.append(link);
   link.click();
   link.remove();

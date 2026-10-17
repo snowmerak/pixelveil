@@ -1,35 +1,14 @@
 import { recordJevDiagnostic } from '../helpers/jevDiagnostics';
-
-export interface NormalizedBox {
-  left: number;
-  top: number;
-  right: number;
-  bottom: number;
-}
-
-export type FrameDetector = (
-  frame: ImageData,
-  object: string,
-  signal: AbortSignal,
-  previousCount?: number,
-) => Promise<NormalizedBox[]>;
-
-const detectionTraces = new WeakMap<AbortSignal, string>();
+import { getDetectionTraceId as getJevTraceId } from './FrameDetector';
+import type { FrameDetector, NormalizedBox } from './FrameDetector';
+export { getDetectionTraceId as getJevTraceId } from './FrameDetector';
+export type { FrameDetector, NormalizedBox } from './FrameDetector';
 const panningBoxCount = 6;
 const minBoxConfidence = 0.15;
 const scrollMinBoxConfidence = 0.1;
 const simpleMinPresence = 0.5;
 const scrollMinPresence = 0.2;
 const panningMinPresence = 0.5;
-
-export function getJevTraceId(signal: AbortSignal): string {
-  let traceId = detectionTraces.get(signal);
-  if (!traceId) {
-    traceId = crypto.randomUUID();
-    detectionTraces.set(signal, traceId);
-  }
-  return traceId;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

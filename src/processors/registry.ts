@@ -2,6 +2,8 @@ import { Dummy } from './Dummy';
 import { JevSimple } from './JevSimple';
 import { JevScroll } from './JevScroll';
 import { JevPanning } from './JevPanning';
+import { VlmProcessor } from './VlmProcessor';
+import type { VlmModel } from './vlmProtocol';
 import type { Processor } from './Processor';
 import type { LocalizedText } from '../i18n';
 
@@ -9,8 +11,9 @@ export interface ProcessorDefinition {
   id: string;
   label: string;
   description: LocalizedText;
-  create: () => Processor;
+  create: (model?: VlmModel) => Processor;
   requiresObject?: boolean;
+  requiresVlmModel?: boolean;
 }
 
 export const processorDefinitions: readonly ProcessorDefinition[] = [
@@ -22,6 +25,17 @@ export const processorDefinitions: readonly ProcessorDefinition[] = [
       ko: '입력 프레임을 변경 없이 그대로 반환합니다.',
     },
     create: () => new Dummy(),
+  },
+  {
+    id: 'vlm-simple',
+    label: 'VLM · Simple detection',
+    description: {
+      en: 'Detects matching objects with a selected VLM using structured bounding-box output (up to 20 objects).',
+      ko: '선택한 VLM의 구조화된 bbox 응답으로 일치하는 객체를 최대 20개 검출합니다.',
+    },
+    create: (model = 'qwen3-vl-reap-24b-a3b') => new VlmProcessor(model),
+    requiresObject: true,
+    requiresVlmModel: true,
   },
   {
     id: 'jev-simple',

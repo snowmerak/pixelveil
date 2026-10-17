@@ -4,13 +4,17 @@ import { DetectionLatency } from './components/DetectionLatency';
 import { useWebcamProcessor } from './hooks/useWebcamProcessor';
 import { useLocale } from './i18n';
 import { processorDefinitions } from './processors/registry';
+import { isVlmModel, vlmModels } from './processors/vlmProtocol';
+import type { VlmModel } from './processors/vlmProtocol';
 
 export function App() {
   const { locale, setLocale, messages } = useLocale();
   const [processorId, setProcessorId] = useState(processorDefinitions[0].id);
   const [object, setObject] = useState('');
+  const [vlmModel, setVlmModel] = useState<VlmModel>(vlmModels[0]);
   const definition = processorDefinitions.find((entry) => entry.id === processorId) ?? processorDefinitions[0];
-  const processor = useMemo(() => definition.create(), [definition]);
+  const selectedModel = definition.requiresVlmModel ? vlmModel : undefined;
+  const processor = useMemo(() => definition.create(selectedModel), [definition, selectedModel]);
   const camera = useWebcamProcessor(processor, object);
   const running = camera.status === 'running';
   const active = running || camera.status === 'requesting';
@@ -59,6 +63,19 @@ export function App() {
             ))}
           </select>
         </div>
+        {definition.requiresVlmModel && (
+          <div className="mp-field model-field">
+            <label className="mp-field__label" htmlFor="vlm-model">{messages.vlmModel}</label>
+            <select
+              id="vlm-model"
+              className="mp-select"
+              value={vlmModel}
+              onChange={(event) => { if (isVlmModel(event.target.value)) setVlmModel(event.target.value); }}
+            >
+              {vlmModels.map((model) => <option key={model} value={model}>{model}</option>)}
+            </select>
+          </div>
+        )}
         <div className="processor-details">
           <p id="processor-description">{definition.description[locale]}</p>
           <p className="mp-text--muted">{definition.requiresObject ? messages.jevHint : messages.noSettings}</p>
@@ -91,7 +108,8 @@ export function App() {
         <FrameCanvas canvasRef={camera.outputCanvasRef} title={messages.processed} description={definition.label} running={running} messages={messages.canvas} />
       </div>
 
-      <p className="workspace-note">{definition.requiresObject ? messages.remoteProcessing : messages.localProcessing}</p>
+      <p className="workspace-note">{definition.requiresVlmModel ? messages.vlmProcessing :
+        definition.requiresObject ? messages.remoteProcessing : messages.localProcessing}</p>
       <DetectionLatency processor={processor} locale={locale} messages={messages.latency} />
       <video ref={camera.videoRef} muted playsInline hidden />
     </main>

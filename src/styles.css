@@ -73,6 +73,15 @@
   min-width: 0;
 }
 
+.model-field {
+  flex: 1 1 320px;
+  max-width: 100%;
+}
+
+.model-field .mp-select {
+  width: 100%;
+}
+
 .frame-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
