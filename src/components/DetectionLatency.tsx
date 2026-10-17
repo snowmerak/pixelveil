@@ -1,5 +1,6 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { detectionLatencyWindowSize } from '../helpers/detectionLatency';
+import { downloadJevLogs, getJevDiagnosticCount, subscribeJevDiagnostics } from '../helpers/jevDiagnostics';
 import type { Locale, Messages } from '../i18n';
 import type { Processor } from '../processors/Processor';
 
@@ -15,6 +16,7 @@ export function DetectionLatency({ processor, locale, messages }: DetectionLaten
   }, [processor]);
   const getSnapshot = useCallback(() => processor.getDetectionLatencyStatistics?.() ?? null, [processor]);
   const statistics = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const logCount = useSyncExternalStore(subscribeJevDiagnostics, getJevDiagnosticCount, getJevDiagnosticCount);
   const numberFormat = new Intl.NumberFormat(locale, { maximumFractionDigits: 0 });
   const formatLatency = (latencyMs: number | undefined) => latencyMs === undefined ? '—' : `${numberFormat.format(latencyMs)} ms`;
 
@@ -31,6 +33,15 @@ export function DetectionLatency({ processor, locale, messages }: DetectionLaten
       </dl>
       <span>{messages.samples}: {numberFormat.format(statistics?.sampleCount ?? 0)} / {numberFormat.format(detectionLatencyWindowSize)}</span>
       {statistics !== null && statistics.sampleCount < 100 && <span className="detection-latency__hint">{messages.smallSample}</span>}
+      <button
+        type="button"
+        className="mp-button mp-button--secondary"
+        onClick={downloadJevLogs}
+        disabled={logCount === 0}
+        title={messages.exportHint}
+      >
+        {messages.exportLogs} ({numberFormat.format(logCount)})
+      </button>
     </aside>
   );
 }

@@ -22,6 +22,8 @@ const english = {
     label: 'Detection latency',
     samples: 'Samples',
     smallSample: 'Fewer than 100 samples; p99 is the maximum.',
+    exportLogs: 'Export logs',
+    exportHint: 'Download up to 3,000 recent response and applied-box events as JSON. Logs survive camera stops but not page reloads.',
     hint: 'Latest and nearest-rank percentiles of the last 1,000 successful detection cycles, including encoding and API round trips. Resets with the camera, target, frame size or processor. Scroll counts objects only on its first cycle.',
   },
   status: {
@@ -68,6 +70,8 @@ const korean: Messages = {
     label: '검출 지연',
     samples: '표본 수',
     smallSample: '표본 100개 미만: p99는 최댓값입니다.',
+    exportLogs: '로그 내보내기',
+    exportHint: '최근 응답·박스 적용 이벤트 최대 3,000개를 JSON으로 받습니다. 카메라 중지 후에도 유지되지만 페이지 새로고침 시 사라집니다.',
     hint: '인코딩과 API 왕복을 포함한 최근 성공 검출 1,000개의 최신값과 최근접 순위 백분위수입니다. 카메라·대상·프레임 크기·프로세서 변경 시 초기화합니다. Scroll은 최초 주기에만 객체 수를 확인합니다.',
   },
   status: {

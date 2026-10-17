@@ -1,3 +1,5 @@
+import { recordJevDiagnostic } from '../helpers/jevDiagnostics';
+
 export interface NormalizedBox {
   left: number;
   top: number;
@@ -18,6 +20,7 @@ const minBoxConfidence = 0.15;
 const scrollMinBoxConfidence = 0.1;
 const simpleMinPresence = 0.5;
 const scrollMinPresence = 0.2;
+const panningMinPresence = 0.5;
 
 export function getJevTraceId(signal: AbortSignal): string {
   let traceId = detectionTraces.get(signal);
@@ -72,9 +75,8 @@ function hasBoxConfidence(answer: unknown, minConfidence = minBoxConfidence): bo
 
 function parsePanningBoxAnswer(answer: unknown): {
   box: NormalizedBox | null;
-  disposition: 'accepted' | 'zero_box' | 'low_confidence';
+  disposition: 'accepted' | 'zero_box';
 } {
-  const confident = hasBoxConfidence(answer);
   if (isRecord(answer) && answer.type === 'box' && isRecord(answer.box)) {
     const { left, top, right, bottom } = answer.box;
     if (left === 0 && top === 0 && right === 0 && bottom === 0) {
@@ -82,18 +84,34 @@ function parsePanningBoxAnswer(answer: unknown): {
     }
   }
   const box = parseBoxAnswer(answer);
-  if (!confident) return { box: null, disposition: 'low_confidence' };
   return { box, disposition: 'accepted' };
+}
+
+function preferSmallerBoxes<Box extends NormalizedBox>(boxes: readonly Box[]): Box[] {
+  const ordered = boxes.map((box, index) => ({
+    box,
+    index,
+    area: (box.right - box.left) * (box.bottom - box.top),
+  })).sort((first, second) => first.area - second.area || first.index - second.index);
+  const selected: typeof ordered = [];
+  for (const candidate of ordered) {
+    const overlaps = selected.some(({ box }) =>
+      candidate.box.left < box.right && candidate.box.right > box.left &&
+      candidate.box.top < box.bottom && candidate.box.bottom > box.top);
+    if (!overlaps) selected.push(candidate);
+  }
+  return selected.sort((first, second) => first.index - second.index).map(({ box }) => box);
 }
 
 export function parseJevPanningBoxes(value: unknown): NormalizedBox[] {
   if (!isRecord(value) || !isRecord(value.answers)) throw new Error('Invalid Jev response.');
+  if (!parsePresenceAnswer(value.answers.present, panningMinPresence)) return [];
   const boxes: NormalizedBox[] = [];
   for (let position = 1; position <= panningBoxCount; position++) {
     const { box } = parsePanningBoxAnswer(value.answers[`target_${position}`]);
     if (box !== null) boxes.push(box);
   }
-  return boxes;
+  return preferSmallerBoxes(boxes);
 }
 
 export function parseJevCount(value: unknown): number {
@@ -156,21 +174,23 @@ function logNumber(value: unknown): number | null {
   return typeof value === 'number' ? value : null;
 }
 
-function logJevResponse(requestId: string, questions: Record<string, JevQuestion>, result: unknown, signal: AbortSignal, requestLatencyMs: number, minPresence: number, minConfidence: number) {
+function logJevResponse(requestId: string, questions: Record<string, JevQuestion>, result: unknown, signal: AbortSignal, requestLatencyMs: number, minPresence: number, minConfidence: number | null) {
   const answers = isRecord(result) && isRecord(result.answers) ? result.answers : {};
   const rows = Object.entries(questions).filter(([, question]) => question.type === 'box').map(([question]) => {
     const answer = answers[question];
     const box = isRecord(answer) && isRecord(answer.box) ? answer.box : {};
-    const presenceQuestion = question.replace(/^target/, 'present');
+    const slotPresenceQuestion = question.replace(/^target/, 'present');
+    const usesGlobalPresence = !Object.hasOwn(questions, slotPresenceQuestion);
+    const presenceQuestion = usesGlobalPresence ? 'present' : slotPresenceQuestion;
     const presence = answers[presenceQuestion];
     let disposition: string;
     try {
-      if (!Object.hasOwn(questions, presenceQuestion)) {
+      if (!parsePresenceAnswer(presence, minPresence)) disposition = 'absent';
+      else if (usesGlobalPresence) {
         disposition = parsePanningBoxAnswer(answer).disposition;
-      } else if (!parsePresenceAnswer(presence, minPresence)) disposition = 'absent';
-      else {
+      } else {
         parseBoxAnswer(answer);
-        disposition = hasBoxConfidence(answer, minConfidence) ? 'accepted' : 'low_confidence';
+        disposition = minConfidence === null || hasBoxConfidence(answer, minConfidence) ? 'accepted' : 'low_confidence';
       }
     } catch {
       disposition = 'invalid';
@@ -188,12 +208,21 @@ function logJevResponse(requestId: string, questions: Record<string, JevQuestion
       disposition: signal.aborted ? 'ignored_cancelled' : disposition,
     };
   });
+  if (minConfidence === null) {
+    const candidates = rows.filter((row) => row.disposition === 'accepted').map((row) => ({
+      ...parseBoxAnswer(answers[row.question]),
+      question: row.question,
+    }));
+    const selectedQuestions = new Set(preferSmallerBoxes(candidates).map(({ question }) => question));
+    for (const row of rows) {
+      if (row.disposition === 'accepted' && !selectedQuestions.has(row.question)) row.disposition = 'overlap_suppressed';
+    }
+  }
   const countAnswer = answers.count;
   const countChoice = isRecord(countAnswer) && countAnswer.type === 'choice' &&
     typeof countAnswer.choice === 'string' && /^count_[0-6]$/.test(countAnswer.choice) ? countAnswer.choice : null;
 
-  console.groupCollapsed(`[Pixelveil][Jev] response ${requestId}`);
-  console.info('[Pixelveil][Jev] response', {
+  const diagnostic = {
     event: 'jev_response',
     timestamp: new Date().toISOString(),
     traceId: getJevTraceId(signal),
@@ -204,12 +233,15 @@ function logJevResponse(requestId: string, questions: Record<string, JevQuestion
     requestedBoxes: rows.length,
     acceptedBoxes: rows.filter((row) => row.disposition === 'accepted').length,
     boxes: rows,
-  });
+  };
+  recordJevDiagnostic(diagnostic);
+  console.groupCollapsed(`[Pixelveil][Jev] response ${requestId}`);
+  console.info('[Pixelveil][Jev] response', diagnostic);
   if (rows.length > 0) console.table(rows);
   console.groupEnd();
 }
 
-async function requestJev(image: Blob, questions: Record<string, JevQuestion>, signal: AbortSignal, minPresence = simpleMinPresence, minConfidence = minBoxConfidence): Promise<unknown> {
+async function requestJev(image: Blob, questions: Record<string, JevQuestion>, signal: AbortSignal, minPresence = simpleMinPresence, minConfidence: number | null = minBoxConfidence): Promise<unknown> {
   signal.throwIfAborted();
   const reference = crypto.randomUUID();
   const body = new FormData();
@@ -224,12 +256,14 @@ async function requestJev(image: Blob, questions: Record<string, JevQuestion>, s
   const startedAt = performance.now();
   const response = await fetch('/api/jev', { method: 'POST', body, signal });
   if (!response.ok) {
-    console.warn('[Pixelveil][Jev] response_error', {
+    const diagnostic = {
       traceId: getJevTraceId(signal),
       requestId: reference,
       status: response.status,
       requestLatencyMs: Math.round(performance.now() - startedAt),
-    });
+    };
+    recordJevDiagnostic({ event: 'response_error', ...diagnostic });
+    console.warn('[Pixelveil][Jev] response_error', diagnostic);
     if (response.status === 503) throw new Error('Set TYPESAFE_API_KEY in .env.local and restart Vite.');
     if (response.status === 504) throw new Error('The Jev request timed out. Start the camera to retry.');
     throw new Error(`Jev request failed (HTTP ${response.status}). Start the camera to retry.`);
@@ -239,11 +273,13 @@ async function requestJev(image: Blob, questions: Record<string, JevQuestion>, s
     result = await response.json();
   } catch (error) {
     if (!signal.aborted) {
-      console.warn('[Pixelveil][Jev] invalid_response', {
+      const diagnostic = {
         traceId: getJevTraceId(signal),
         requestId: reference,
         status: response.status,
-      });
+      };
+      recordJevDiagnostic({ event: 'invalid_response', ...diagnostic });
+      console.warn('[Pixelveil][Jev] invalid_response', diagnostic);
     }
     throw error;
   }
@@ -307,7 +343,12 @@ export const detectJevScrollBoxes: FrameDetector = async (frame, object, signal,
 export const detectJevPanningBoxes: FrameDetector = async (frame, object, signal) => {
   signal.throwIfAborted();
   const image = await encodeFrame(frame);
-  const questions: Record<string, JevQuestion> = {};
+  const questions: Record<string, JevQuestion> = {
+    present: {
+      type: 'noul',
+      instructions: `Is at least one object matching this description visible in \`photo\`? ${object}`,
+    },
+  };
   for (let position = 1; position <= panningBoxCount; position++) {
     questions[`target_${position}`] = {
       type: 'box',
@@ -319,5 +360,5 @@ export const detectJevPanningBoxes: FrameDetector = async (frame, object, signal
         `Object description: ${object}`,
     };
   }
-  return parseJevPanningBoxes(await requestJev(image, questions, signal));
+  return parseJevPanningBoxes(await requestJev(image, questions, signal, panningMinPresence, null));
 };

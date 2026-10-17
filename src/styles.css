@@ -10,7 +10,7 @@
 .workspace {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 32px 32px 88px;
+  padding: 32px 32px 240px;
 }
 
 .workspace-header,
@@ -173,7 +173,7 @@
 
 @media (max-width: 800px) {
   .workspace {
-    padding: 20px 16px 200px;
+    padding: 20px 16px 240px;
   }
 
   .frame-grid {

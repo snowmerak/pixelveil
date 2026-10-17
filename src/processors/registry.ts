@@ -47,8 +47,8 @@ export const processorDefinitions: readonly ProcessorDefinition[] = [
     id: 'jev-panning',
     label: 'Jev · Panning decision',
     description: {
-      en: 'Requests six boxes, prompts zeros for missing objects, and keeps boxes with confidence ≥ 0.15 (experimental).',
-      ko: 'Box 6개를 요청하고 없는 객체는 영점으로 유도하며, confidence 0.15 이상만 적용합니다 (실험적).',
+      en: 'Requires any-object presence ≥ 0.5; prefers smaller overlapping boxes, with no box confidence cutoff.',
+      ko: '전체 존재 확률 0.5 이상이면 confidence 제한 없이 겹치는 박스 중 작은 영역을 우선합니다.',
     },
     create: () => new JevPanning(),
     requiresObject: true,

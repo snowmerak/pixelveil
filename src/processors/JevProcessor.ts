@@ -1,4 +1,5 @@
 import { mosaicRegion } from '../helpers/mosaic';
+import { recordJevDiagnostic } from '../helpers/jevDiagnostics';
 import { detectionLatencyWindowSize, summarizeDetectionLatencies } from '../helpers/detectionLatency';
 import type { DetectionLatencyStatistics } from '../helpers/detectionLatency';
 import type { Processor } from './Processor';
@@ -101,7 +102,7 @@ export class JevProcessor implements Processor {
         this.hasDetection = true;
         const detectionLatencyMs = performance.now() - startedAt;
         this.setDetectionLatency(detectionLatencyMs);
-        console.info('[Pixelveil][Jev] boxes_applied', {
+        const diagnostic = {
           traceId: getJevTraceId(controller.signal),
           frameWidth: frame.width,
           frameHeight: frame.height,
@@ -115,7 +116,9 @@ export class JevProcessor implements Processor {
             width: (box.right - box.left) * frame.width,
             height: (box.bottom - box.top) * frame.height,
           })),
-        });
+        };
+        recordJevDiagnostic({ event: 'boxes_applied', ...diagnostic });
+        console.info('[Pixelveil][Jev] boxes_applied', diagnostic);
       }
     } catch (error) {
       if (generation === this.generation && !controller.signal.aborted) {
