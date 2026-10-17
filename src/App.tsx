@@ -6,15 +6,24 @@ import { useLocale } from './i18n';
 import { processorDefinitions } from './processors/registry';
 import { isVlmModel, vlmModels } from './processors/vlmProtocol';
 import type { VlmModel } from './processors/vlmProtocol';
+import { defaultEmbeddingThreshold, EmbeddingGate } from './processors/EmbeddingGate';
 
 export function App() {
   const { locale, setLocale, messages } = useLocale();
   const [processorId, setProcessorId] = useState(processorDefinitions[0].id);
   const [object, setObject] = useState('');
   const [vlmModel, setVlmModel] = useState<VlmModel>(vlmModels[0]);
+  const [embeddingEnabled, setEmbeddingEnabled] = useState(false);
+  const [embeddingThreshold, setEmbeddingThreshold] = useState(defaultEmbeddingThreshold);
   const definition = processorDefinitions.find((entry) => entry.id === processorId) ?? processorDefinitions[0];
   const selectedModel = definition.requiresVlmModel ? vlmModel : undefined;
-  const processor = useMemo(() => definition.create(selectedModel), [definition, selectedModel]);
+  const useEmbedding = Boolean(definition.requiresObject && embeddingEnabled);
+  const selectedThreshold = useEmbedding ? embeddingThreshold : null;
+  const processor = useMemo(() => {
+    const created = definition.create(selectedModel);
+    if (selectedThreshold !== null) created.setFrameGate?.(new EmbeddingGate(selectedThreshold));
+    return created;
+  }, [definition, selectedModel, selectedThreshold]);
   const camera = useWebcamProcessor(processor, object);
   const running = camera.status === 'running';
   const active = running || camera.status === 'requesting';
@@ -94,6 +103,25 @@ export function App() {
             />
           </div>
         )}
+        {definition.requiresObject && (
+          <div className="embedding-settings">
+            <label className="embedding-toggle" htmlFor="embedding-enabled">
+              <input id="embedding-enabled" type="checkbox" checked={embeddingEnabled}
+                onChange={(event) => setEmbeddingEnabled(event.target.checked)} />
+              {messages.embedding.enable}
+            </label>
+            <div className="mp-field">
+              <label className="mp-field__label" htmlFor="embedding-threshold">
+                {messages.embedding.threshold}: {embeddingThreshold.toFixed(2)}
+              </label>
+              <input id="embedding-threshold" type="range" min="-1" max="1" step="0.01"
+                value={embeddingThreshold} disabled={!embeddingEnabled}
+                onChange={(event) => setEmbeddingThreshold(event.target.valueAsNumber)}
+                aria-describedby="embedding-hint" />
+            </div>
+            <p id="embedding-hint" className="mp-text--muted">{messages.embedding.hint}</p>
+          </div>
+        )}
       </section>
 
       {camera.error && (
@@ -110,7 +138,8 @@ export function App() {
 
       <p className="workspace-note">{definition.requiresVlmModel ? messages.vlmProcessing :
         definition.requiresObject ? messages.remoteProcessing : messages.localProcessing}</p>
-      <DetectionLatency processor={processor} locale={locale} messages={messages.latency} />
+      {useEmbedding && <p className="workspace-note">{messages.embedding.remoteProcessing}</p>}
+      <DetectionLatency processor={processor} locale={locale} messages={messages.latency} embeddingMessages={messages.embedding} />
       <video ref={camera.videoRef} muted playsInline hidden />
     </main>
   );

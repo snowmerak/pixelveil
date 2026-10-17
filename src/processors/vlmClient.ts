@@ -1,25 +1,12 @@
 import { recordDetectionDiagnostic } from '../helpers/jevDiagnostics';
+import { encodeFrameDataUrl } from '../helpers/frameImage';
 import { getDetectionTraceId } from './FrameDetector';
 import type { FrameDetector } from './FrameDetector';
 import { parseVlmCompletion, VlmResponseError } from './vlmProtocol';
 import type { VlmModel } from './vlmProtocol';
 
 export function encodeVlmFrame(frame: ImageData): { image: string; width: number; height: number } {
-  const source = document.createElement('canvas');
-  source.width = frame.width;
-  source.height = frame.height;
-  const sourceContext = source.getContext('2d');
-  if (!sourceContext) throw new Error('Canvas 2D rendering is unavailable.');
-  sourceContext.putImageData(frame, 0, 0);
-
-  const scale = Math.min(1, 1280 / frame.width, 720 / frame.height);
-  const image = document.createElement('canvas');
-  image.width = Math.max(1, Math.round(frame.width * scale));
-  image.height = Math.max(1, Math.round(frame.height * scale));
-  const context = image.getContext('2d');
-  if (!context) throw new Error('Canvas 2D rendering is unavailable.');
-  context.drawImage(source, 0, 0, image.width, image.height);
-  return { image: image.toDataURL('image/png'), width: image.width, height: image.height };
+  return encodeFrameDataUrl(frame, 1280, 720);
 }
 
 export function createVlmDetector(model: VlmModel): FrameDetector {

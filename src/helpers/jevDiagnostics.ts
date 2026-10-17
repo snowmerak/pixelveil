@@ -44,7 +44,7 @@ export function downloadJevLogs(): void {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
-  const source = report.events.some((event) => event.provider === 'VLM') ? 'detection' : 'jev';
+  const source = report.events.some((event) => event.provider === 'VLM' || event.provider === 'Embedding') ? 'detection' : 'jev';
   link.download = `pixelveil-${source}-${report.exportedAt.replace(/[:.]/g, '-')}.json`;
   document.body.append(link);
   link.click();

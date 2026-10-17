@@ -10,7 +10,7 @@
 .workspace {
   max-width: 1600px;
   margin: 0 auto;
-  padding: 32px 32px 240px;
+  padding: 32px 32px 440px;
 }
 
 .workspace-header,
@@ -82,6 +82,36 @@
   width: 100%;
 }
 
+.embedding-settings {
+  display: grid;
+  grid-template-columns: minmax(180px, auto) minmax(160px, 240px);
+  align-items: center;
+  gap: 12px 24px;
+  flex: 1 1 100%;
+  font-size: 0.875rem;
+}
+
+.embedding-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.embedding-settings p {
+  grid-column: 1 / -1;
+}
+
+.embedding-settings input {
+  accent-color: var(--mp-text-primary);
+}
+
+.embedding-latency {
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--mp-text-muted);
+}
+
 .frame-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -143,6 +173,8 @@
   display: grid;
   gap: 8px;
   max-width: calc(100vw - 40px);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
   padding: 12px 16px;
   border-radius: 8px;
   background: var(--mp-bg-elevated);
@@ -182,10 +214,14 @@
 
 @media (max-width: 800px) {
   .workspace {
-    padding: 20px 16px 240px;
+    padding: 20px 16px 440px;
   }
 
   .frame-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .embedding-settings {
     grid-template-columns: 1fr;
   }
 }

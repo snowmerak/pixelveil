@@ -5,6 +5,7 @@ import type { DetectionLatencyStatistics } from '../helpers/detectionLatency';
 import type { Processor } from './Processor';
 import { getDetectionTraceId } from './FrameDetector';
 import type { FrameDetector, NormalizedBox } from './FrameDetector';
+import type { FrameGate, FrameGateStatistics } from './FrameGate';
 
 export class AsyncDetectionProcessor implements Processor {
   private object = '';
@@ -20,6 +21,8 @@ export class AsyncDetectionProcessor implements Processor {
   private readonly latencyListeners = new Set<() => void>();
   private readonly detect: FrameDetector;
   private readonly blockSize: number;
+  private frameGate: FrameGate | null = null;
+  private unsubscribeGate: (() => void) | null = null;
 
   constructor(
     detect: FrameDetector,
@@ -69,7 +72,21 @@ export class AsyncDetectionProcessor implements Processor {
     this.object = '';
     this.width = 0;
     this.height = 0;
+    this.frameGate?.reset();
     this.setDetectionLatency(null);
+  }
+
+  setFrameGate(gate: FrameGate | null): void {
+    if (this.frameGate === gate) return;
+    this.reset();
+    this.unsubscribeGate?.();
+    this.frameGate = gate;
+    this.unsubscribeGate = gate?.subscribe(() => this.latencyListeners.forEach((listener) => listener())) ?? null;
+    this.latencyListeners.forEach((listener) => listener());
+  }
+
+  getFrameGateStatistics(): FrameGateStatistics | null {
+    return this.frameGate?.getStatistics() ?? null;
   }
 
   getDetectionLatencyMs(): number | null {
@@ -106,7 +123,26 @@ export class AsyncDetectionProcessor implements Processor {
   private async request(frame: ImageData, object: string, controller: AbortController, generation: number) {
     const startedAt = performance.now();
     try {
-      const boxes = await this.detect(frame, object, controller.signal, this.hasDetection ? this.boxes.length : undefined);
+      const detectionFrame = this.frameGate ? new ImageData(new Uint8ClampedArray(frame.data), frame.width, frame.height) : frame;
+      if (this.frameGate) {
+        let passed: boolean;
+        try {
+          passed = await this.frameGate.check(detectionFrame, object, controller.signal);
+        } catch {
+          return;
+        }
+        if (generation !== this.generation || controller.signal.aborted) return;
+        if (!passed) {
+          this.boxes = [];
+          recordDetectionDiagnostic({
+            event: 'frame_skipped', provider: this.provider, ...this.diagnosticContext,
+            traceId: getDetectionTraceId(controller.signal), reason: 'embedding_below_threshold',
+            latencyMs: performance.now() - startedAt, boxCount: 0,
+          });
+          return;
+        }
+      }
+      const boxes = await this.detect(detectionFrame, object, controller.signal, this.hasDetection ? this.boxes.length : undefined);
       if (generation === this.generation && !controller.signal.aborted) {
         this.boxes = boxes;
         this.hasDetection = true;
