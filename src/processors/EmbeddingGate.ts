@@ -9,7 +9,7 @@ import type { FrameGate, FrameGateStatistics } from './FrameGate';
 
 type Embed = typeof requestEmbedding;
 
-export const defaultEmbeddingThreshold = 0.5;
+export const defaultEmbeddingThreshold = 0.65;
 
 export class EmbeddingGate implements FrameGate {
   private object = '';
