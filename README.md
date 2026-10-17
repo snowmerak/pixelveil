@@ -31,6 +31,7 @@ pnpm preview
 - `src/processors/JevProcessor.ts`: 프레임 드롭, 최근 bbox 적용, 검출 주기와 취소 상태 관리
 - `src/processors/JevSimple.ts`: 단일 객체 검출 프로세서
 - `src/processors/JevScroll.ts`: 최대 6개 객체 검출 프로세서
+- `src/processors/JevPanning.ts`: 매 주기 고정 Box 6개와 영점 응답을 사용하는 실험 프로세서
 - `src/processors/jevClient.ts`: 이미지 인코딩, Choice·Box·존재 여부 요청, 응답 검증
 - `server/jevProxy.ts`: 개발·미리보기 서버의 TypeSafe API 프록시
 - `src/processors/registry.ts`: UI에 표시할 프로세서 이름, 설명, 생성 함수
@@ -83,6 +84,16 @@ pnpm preview
 
 Box에는 ‘없음’ 응답이 없으므로 단순한 Box 응답 수를 실제 개수로 사용할 수 없습니다. 여기서 유효 개수는 순번별 Noul 판단과 좌표 검증을 통과한 bbox의 수이며, 실제 객체 수를 보장하는 값은 아닙니다. 이 구현은 모델의 존재 여부·순서 판단을 실험하는 PoC입니다. 실제로 서로 다른 객체를 모두 찾거나 중복 bbox를 피하는 정확도를 보장하지 않습니다. 한 번에 늘릴 수 있는 탐색 수는 이전 검출 수보다 1개이며 최대 6개입니다. 키 설정·프록시·타임아웃·첫 검출 전 원본 표시 동작은 Simple decision과 같습니다. 타임아웃은 각 HTTP 요청에 별도로 적용됩니다.
 
+## Jev · Panning decision
+
+같은 API 키 설정으로 **Jev · Panning decision**을 선택하고 대상 설명을 입력합니다. 최초 주기부터 매번 PNG를 한 번 인코딩하고, `target_1`부터 `target_6`까지 **Box 질의 6개를 한 HTTP 요청**으로 보냅니다. Choice나 Noul은 사용하지 않으며 이전 검출 개수와 무관하게 항상 6개를 요청합니다. 이미지를 타일로 나누는 방식이 아니라, Scroll과 같은 위→아래·동률이면 왼쪽→오른쪽 순서의 서로 다른 객체를 지정합니다.
+
+각 질의에는 해당 순번의 객체 하나만 감싸는 최소 박스를 요청하고, 그 순번이 없으면 `{ left: 0, top: 0, right: 0, bottom: 0 }`을 반환하도록 지시합니다. 네 좌표가 모두 숫자 `0`인 Box만 빈 슬롯으로 제외합니다. 정상 박스가 이미지의 위쪽이나 왼쪽 경계(`top=0` 또는 `left=0`)에 닿아도 유지합니다. 6개가 모두 영점이면 캐시를 비웁니다. 응답 누락·잘못된 타입·범위 밖 좌표·영점 이외의 너비나 높이 0인 박스는 오류로 처리하며 부분 적용하지 않습니다.
+
+이 영점 규칙은 **프로젝트의 실험용 프롬프트 규약이지 API의 공식 ‘없음’ 응답이 아닙니다**. [Box 공식 문서](https://docs.typesafe.ai/primitives/box)는 항상 박스를 반환하고 정상 좌표는 `left < right`, `top < bottom`이라고 명시합니다. 모델이나 API가 영점 지시를 따르지 않으면 없는 객체에도 박스가 생길 수 있습니다. 이를 실험하기 위해 Noul 확인이나 자동 보정·중복 제거·재질의는 추가하지 않습니다. 결과의 실제 존재 여부·개별 객체 분리 정확도·지연 개선은 보장하지 않습니다.
+
+프레임 드롭·이전 bbox 유지·취소·초기화·오류 처리는 기존 Jev 프로세서와 같습니다. 기존 지연 패널 및 p50·p90·p99 통계도 그대로 적용되며, 응답 로그에서 영점 슬롯은 `disposition: zero_box`, 존재 확률은 `null`로 표시합니다.
+
 ## 검출 지연 표시
 
 화면 우하단에 최근 성공적으로 완료된 Jev 검출 주기의 경과 시간을 밀리초(`ms`)로 표시합니다. `performance.now()`로 검출 시작부터 bbox 응답 검증 완료까지 측정하며, PNG 인코딩·업로드·서버 프록시·API 왕복이 포함됩니다. Scroll의 최초 주기는 개수 확인과 Box 요청을 모두 포함하고, 최초에 0개 응답이면 개수 확인 완료까지 측정합니다. 이후에는 Box·존재 여부를 묶은 단일 요청 시간을 포함합니다. 카메라 캡처와 모자이크 렌더링 시간은 포함하지 않습니다.
@@ -98,7 +109,7 @@ Box에는 ‘없음’ 응답이 없으므로 단순한 Box 응답 수를 실제
 브라우저 개발자 도구(F12)의 **Console**에서 `[Pixelveil][Jev]`로 필터링합니다. 기본 Info 로그 수준에서 볼 수 있으며 서버 터미널이 아닌 브라우저 콘솔에 출력됩니다.
 
 - `response <requestId>` 그룹: 펼치면 요청 시간(`requestLatencyMs`), Choice 결과(`countChoice`), 요청·채택 bbox 수와 좌표 표를 볼 수 있습니다. 좌표는 API의 정규화 값(0~1)이며, `confidence`와 순번별 존재 확률(`presence`)도 함께 표시합니다.
-- 표의 `disposition`: `accepted`는 검증·존재 판정을 통과한 슬롯, `absent`는 존재 확률 0.5 미만, `invalid`는 응답 누락·잘못된 값, `ignored_cancelled`는 취소된 요청의 응답입니다. `invalid` 슬롯이 있으면 응답 전체가 실패할 수 있으므로 `accepted` 표시는 최종 적용 여부와 다릅니다.
+- 표의 `disposition`: `accepted`는 좌표 검증과 해당 전략의 채택 조건을 통과한 슬롯, `absent`는 존재 확률 0.5 미만, `zero_box`는 Panning의 영점 슬롯, `invalid`는 응답 누락·잘못된 값, `ignored_cancelled`는 취소된 요청의 응답입니다. `invalid` 슬롯이 있으면 응답 전체가 실패할 수 있으므로 `accepted` 표시는 최종 적용 여부와 다릅니다. Panning은 Noul이 없어 `presence`가 `null`입니다.
 - `boxes_applied`: 실제 bbox 캐시에 반영한 정규화 좌표(`boxes`), 원본 프레임 기준 픽셀 좌표(`pixelBoxes`), 개수(`boxCount`), 프레임 크기, 전체 검출 시간(`detectionLatencyMs`)입니다. 픽셀 좌표는 모자이크 헬퍼의 반올림·경계 처리 전 값입니다. 같은 검출 주기의 개수·Box 응답과 적용 결과는 `traceId`로 연결됩니다. HTTP 요청마다 `requestId`는 다릅니다.
 - `response_error` / `invalid_response`: HTTP 오류 상태나 JSON 해석 실패를 확인합니다.
 

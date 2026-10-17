@@ -13,6 +13,7 @@ export type FrameDetector = (
 ) => Promise<NormalizedBox[]>;
 
 const detectionTraces = new WeakMap<AbortSignal, string>();
+const panningBoxCount = 6;
 
 export function getJevTraceId(signal: AbortSignal): string {
   let traceId = detectionTraces.get(signal);
@@ -55,6 +56,24 @@ function parseBoxAnswer(answer: unknown): NormalizedBox {
     throw new Error('Invalid Jev box coordinates.');
   }
   return { left, top, right, bottom };
+}
+
+function parsePanningBoxAnswer(answer: unknown): NormalizedBox | null {
+  if (isRecord(answer) && answer.type === 'box' && isRecord(answer.box)) {
+    const { left, top, right, bottom } = answer.box;
+    if (left === 0 && top === 0 && right === 0 && bottom === 0) return null;
+  }
+  return parseBoxAnswer(answer);
+}
+
+export function parseJevPanningBoxes(value: unknown): NormalizedBox[] {
+  if (!isRecord(value) || !isRecord(value.answers)) throw new Error('Invalid Jev response.');
+  const boxes: NormalizedBox[] = [];
+  for (let position = 1; position <= panningBoxCount; position++) {
+    const box = parsePanningBoxAnswer(value.answers[`target_${position}`]);
+    if (box !== null) boxes.push(box);
+  }
+  return boxes;
 }
 
 export function parseJevCount(value: unknown): number {
@@ -120,10 +139,13 @@ function logJevResponse(requestId: string, questions: Record<string, JevQuestion
   const rows = Object.entries(questions).filter(([, question]) => question.type === 'box').map(([question]) => {
     const answer = answers[question];
     const box = isRecord(answer) && isRecord(answer.box) ? answer.box : {};
-    const presence = answers[question.replace(/^target/, 'present')];
+    const presenceQuestion = question.replace(/^target/, 'present');
+    const presence = answers[presenceQuestion];
     let disposition: string;
     try {
-      if (!parsePresenceAnswer(presence)) disposition = 'absent';
+      if (!Object.hasOwn(questions, presenceQuestion)) {
+        disposition = parsePanningBoxAnswer(answer) === null ? 'zero_box' : 'accepted';
+      } else if (!parsePresenceAnswer(presence)) disposition = 'absent';
       else {
         parseBoxAnswer(answer);
         disposition = 'accepted';
@@ -256,4 +278,22 @@ export const detectJevScrollBoxes: FrameDetector = async (frame, object, signal,
     };
   }
   return parseJevScrollBoxes(await requestJev(image, questions, signal), count);
+};
+
+export const detectJevPanningBoxes: FrameDetector = async (frame, object, signal) => {
+  signal.throwIfAborted();
+  const image = await encodeFrame(frame);
+  const questions: Record<string, JevQuestion> = {};
+  for (let position = 1; position <= panningBoxCount; position++) {
+    questions[`target_${position}`] = {
+      type: 'box',
+      instructions: `Find the distinct matching object at position ${position} (1-based) in \`photo\`. ` +
+        'Order matching objects from top to bottom by their top edge, breaking ties from left to right by their left edge. ' +
+        'Return the tight bounding box for only this one object, not a group or another position. ' +
+        'The number of matching objects is unknown; do not assume there are six. ' +
+        'If no matching object exists at this position, return exactly left=0, top=0, right=0, bottom=0. ' +
+        `Object description: ${object}`,
+    };
+  }
+  return parseJevPanningBoxes(await requestJev(image, questions, signal));
 };

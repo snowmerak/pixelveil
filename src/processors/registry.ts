@@ -1,6 +1,7 @@
 import { Dummy } from './Dummy';
 import { JevSimple } from './JevSimple';
 import { JevScroll } from './JevScroll';
+import { JevPanning } from './JevPanning';
 import type { Processor } from './Processor';
 import type { LocalizedText } from '../i18n';
 
@@ -40,6 +41,16 @@ export const processorDefinitions: readonly ProcessorDefinition[] = [
       ko: '최초 개수 확인 후 이전 검출 수보다 하나 더 요청하며 최대 6개를 모자이크합니다.',
     },
     create: () => new JevScroll(),
+    requiresObject: true,
+  },
+  {
+    id: 'jev-panning',
+    label: 'Jev · Panning decision',
+    description: {
+      en: 'Always asks for six boxes in one request, prompting zero coordinates for missing objects (experimental).',
+      ko: '항상 Box 6개를 한 번에 요청하며, 없는 객체는 영점 좌표로 유도합니다 (실험적).',
+    },
+    create: () => new JevPanning(),
     requiresObject: true,
   },
 ];
