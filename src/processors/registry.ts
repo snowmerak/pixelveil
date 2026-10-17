@@ -27,8 +27,8 @@ export const processorDefinitions: readonly ProcessorDefinition[] = [
     id: 'jev-simple',
     label: 'Jev · Simple decision',
     description: {
-      en: 'Detects one matching object with Jev and mosaics its latest location.',
-      ko: 'Jev로 일치하는 객체 하나를 검출하고 최근 위치를 모자이크합니다.',
+      en: 'Detects one matching object with Jev; requires presence ≥ 0.5 and box confidence ≥ 0.15.',
+      ko: 'Jev로 객체 하나를 검출하며 존재 확률 0.5 이상, Box confidence 0.15 이상만 적용합니다.',
     },
     create: () => new JevSimple(),
     requiresObject: true,
@@ -37,8 +37,8 @@ export const processorDefinitions: readonly ProcessorDefinition[] = [
     id: 'jev-scroll',
     label: 'Jev · Scroll decision',
     description: {
-      en: 'Counts once, then probes one more object than last detected, up to six.',
-      ko: '최초 개수 확인 후 이전 검출 수보다 하나 더 요청하며 최대 6개를 모자이크합니다.',
+      en: 'Counts once, then probes one extra object up to six; requires presence ≥ 0.2 and box confidence ≥ 0.1.',
+      ko: '최초 개수 확인 후 이전 검출 수+1개(최대 6개)를 요청하며 존재 확률 0.2·Box confidence 0.1 이상만 적용합니다.',
     },
     create: () => new JevScroll(),
     requiresObject: true,
@@ -47,8 +47,8 @@ export const processorDefinitions: readonly ProcessorDefinition[] = [
     id: 'jev-panning',
     label: 'Jev · Panning decision',
     description: {
-      en: 'Always asks for six boxes in one request, prompting zero coordinates for missing objects (experimental).',
-      ko: '항상 Box 6개를 한 번에 요청하며, 없는 객체는 영점 좌표로 유도합니다 (실험적).',
+      en: 'Requests six boxes, prompts zeros for missing objects, and keeps boxes with confidence ≥ 0.15 (experimental).',
+      ko: 'Box 6개를 요청하고 없는 객체는 영점으로 유도하며, confidence 0.15 이상만 적용합니다 (실험적).',
     },
     create: () => new JevPanning(),
     requiresObject: true,
