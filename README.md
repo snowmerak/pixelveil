@@ -4,6 +4,8 @@ A webcam frame-processing lab built with Vite, React, and TypeScript. The UI use
 
 The UI defaults to English, with Korean available through the language selector in the header. The selected language is saved in local storage and persists across reloads. UI translations live in `src/i18n.ts`; localized processor descriptions are defined in the registry.
 
+Experiment notes (what I tried, measured, and learned): [English](docs/note_en.md) · [한국어](docs/note_kr.md)
+
 ## Getting started
 
 Use Node.js 22.13 or later within the 22.x series, or Node.js 24 or later, and pnpm 10.28.1.
