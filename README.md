@@ -1,21 +1,21 @@
 # Pixelveil
 
-Vite + React + TypeScript 기반 웹캠 프레임 처리 실험용 골격입니다. UI는 `merak-protocol-design-system`의 CSS와 토큰을 사용합니다.
+A webcam frame-processing lab built with Vite, React, and TypeScript. The UI uses CSS and tokens from `merak-protocol-design-system`.
 
-UI는 기본 영어이며 헤더의 언어 선택에서 한국어로 전환할 수 있습니다. 선택한 언어는 로컬 저장소에 보관되어 새로고침 후에도 유지됩니다. 번역은 `src/i18n.ts`에서 관리하며, 프로세서 설명은 등록 목록에 언어별로 작성합니다.
+The UI defaults to English, with Korean available through the language selector in the header. The selected language is saved in local storage and persists across reloads. UI translations live in `src/i18n.ts`; localized processor descriptions are defined in the registry.
 
-## 실행
+## Getting started
 
-Node.js 22.13 이상(22.x) 또는 24 이상과 pnpm 10.28.1을 사용합니다.
+Use Node.js 22.13 or later within the 22.x series, or Node.js 24 or later, and pnpm 10.28.1.
 
-`pnpm-workspace.yaml`은 Windows ARM에서 pnpm과 Node.js의 실행 아키텍처가 다른 경우에도 빌드할 수 있도록 현재 아키텍처와 ARM64 네이티브 의존성을 함께 설치합니다.
+`pnpm-workspace.yaml` installs native dependencies for both the current architecture and ARM64 so builds also work on Windows ARM when pnpm and Node.js run under different architectures.
 
 ```sh
 pnpm install
 pnpm dev
 ```
 
-브라우저에서 표시된 localhost 주소를 열고 **카메라 시작**을 누른 뒤 카메라 권한을 허용합니다. 원본과 처리 결과는 나란히 표시되며, 좁은 화면에서는 세로로 배치됩니다. 카메라 사용에는 localhost 또는 HTTPS가 필요합니다.
+Open the localhost URL printed in the terminal, click **Start camera**, and allow camera access. The original and processed views appear side by side, or vertically on narrow screens. Camera access requires localhost or HTTPS.
 
 ```sh
 pnpm typecheck
@@ -24,169 +24,203 @@ pnpm build
 pnpm preview
 ```
 
-## 구조
+## Configuration
 
-- `src/processors/Processor.ts`: `process(inputFrame: ImageData, object: string): ImageData` 인터페이스
-- `src/processors/Dummy.ts`: 전달받은 프레임을 그대로 반환하는 기본 구현
-- `src/processors/AsyncDetectionProcessor.ts`: 프레임 드롭, 검출 기준 프레임 보존, 추적·검출 주기와 취소 상태 관리
-- `src/processors/JevProcessor.ts`: Jev 프로세서 공통 클래스
-- `src/tracking/`: CPU 기반 희소 광류, 원본 이력, 늦은 검출 좌표 보정 및 실시간 추적
-- `src/processors/JevSimple.ts`: 단일 객체 검출 프로세서
-- `src/processors/JevScroll.ts`: 최대 6개 객체 검출 프로세서
-- `src/processors/JevPanning.ts`: 매 주기 고정 Box 6개와 영점 응답을 사용하는 실험 프로세서
-- `src/processors/jevClient.ts`: 이미지 인코딩, Choice·Box·존재 여부 요청, 응답 검증
-- `server/jevProxy.ts`: 개발·미리보기 서버의 TypeSafe API 프록시
-- `src/processors/registry.ts`: UI에 표시할 프로세서 이름, 설명, 생성 함수
-- `src/helpers/`: bbox 영역 모자이크 등 프레임 처리 헬퍼
-- `src/hooks/useWebcamProcessor.ts`: 카메라 스트림 수명과 프레임 처리 루프
-- `src/components/FrameCanvas.tsx`: 원본·처리 결과 캔버스
-- `src/App.tsx`: 프로세서 선택 및 카메라 제어 UI
+Dummy works without external services. Jev requires a TypeSafe API key, and VLM requires an image-capable OpenAI-compatible Chat Completions server. The optional embedding pre-check was implemented using [snowmerak/oev](https://github.com/snowmerak/oev) with EmbeddingGemma2 and expects its multimodal embedding API contract, described below. These services and their models are not installed or started by Pixelveil.
 
-## 프로세서 추가
+Copy `.env.example` to `.env.local`, then replace service addresses, model IDs, and credentials with values for your environment. Explicitly configure the services you intend to use.
 
-1. `Processor`를 구현하는 클래스를 `src/processors/`에 추가합니다.
-2. `processorDefinitions`에 고유한 `id`, `label`, `description`, `create`를 등록합니다.
-3. 알고리즘에 조절할 값이 생기면 프로세서 설정 영역에 해당 컨트롤을 추가합니다. `requiresObject: true`이면 대상 설명 입력창을 표시합니다.
+For example, the following assumes a VLM server on the same machine at port 1234 and an embedding server at port 8001. These addresses and ports are examples, not application defaults. Replace the API-key and embedding-model placeholders before using those services; optional keys can remain empty if the servers do not require authentication.
 
-프레임 처리 순서는 `video → 원본 canvas → ImageData → Processor.process → 결과 canvas`입니다. 입력은 RGBA `ImageData`이며 기본 `Dummy`는 같은 객체를 반환합니다. 프로세서는 동기 방식이고, 필요하면 입력을 직접 변경하거나 다른 크기의 `ImageData`를 반환할 수 있습니다. 원본 캔버스는 처리 전에 그려지므로 입력 객체를 변경해도 원본 화면에는 영향을 주지 않습니다.
+```dotenv
+TYPESAFE_API_KEY=your-typesafe-api-key
+JEV_TIMEOUT_MS=30000
+VLM_BASE_URL=http://localhost:1234/v1
+VLM_API_KEY=
+VLM_TIMEOUT_MS=120000
+EMBEDDING_BASE_URL=http://localhost:8001/v1
+EMBEDDING_MODEL=your-multimodal-embedding-model-id
+EMBEDDING_API_KEY=
+EMBEDDING_TIMEOUT_MS=30000
+```
 
-`process`의 두 번째 인자 `object`는 문자열입니다. `useWebcamProcessor(processor, object)`가 각 프레임과 함께 입력창의 현재 값을 전달하며, 값이 바뀌면 카메라 스트림을 유지한 채 다음 처리부터 적용합니다. `Dummy`는 해당 값을 사용하지 않습니다.
+For services on another machine, use a hostname or address reachable from the machine running Vite; `localhost` refers to the Vite server's machine, not necessarily the browser's. Base URLs include the API prefix, such as `/v1`, but not `/chat/completions` or `/embeddings`. All timeout values are milliseconds.
 
-프로세서 선택 시 새 인스턴스를 생성해 다음 프레임부터 적용하며 카메라 스트림은 유지합니다. 카메라 중지·컴포넌트 해제 시 스트림 트랙과 렌더링 루프를 정리하고, 선택적 `reset()`으로 프로세서의 진행 중인 작업과 캐시를 초기화합니다. 모자이크 연산은 브라우저 내 메인 스레드에서 처리합니다. `Dummy`는 외부로 프레임을 보내지 않으며 Jev 프로세서는 검출할 프레임을 TypeSafe로 전송합니다.
+These variables are server-side settings; do not add a `VITE_` prefix to secrets. Values are loaded at Vite startup, with process environment variables taking precedence over environment-file values. Restart Vite after changing them. The browser calls same-origin `/api/jev`, `/api/vlm`, and `/api/embedding` routes, not the configured upstream addresses directly. A static-only deployment must supply equivalent server proxies.
+
+## Project structure
+
+- `src/processors/Processor.ts`: the `process(inputFrame: ImageData, object: string): ImageData` interface
+- `src/processors/Dummy.ts`: the default implementation, which returns the input frame unchanged
+- `src/processors/AsyncDetectionProcessor.ts`: detection-frame dropping, source-frame preservation, tracking and detection cycles, and cancellation state
+- `src/processors/JevProcessor.ts`: shared base class for Jev processors
+- `src/tracking/`: CPU-based sparse optical flow, source-frame history, delayed detection correction, and live tracking
+- `src/processors/JevSimple.ts`: single-object detection processor
+- `src/processors/JevScroll.ts`: detection processor for up to six objects
+- `src/processors/JevPanning.ts`: experimental processor using six fixed Box queries and all-zero responses for empty slots
+- `src/processors/jevClient.ts`: image encoding, Choice, Box, and presence queries, and response validation
+- `server/jevProxy.ts`: TypeSafe API proxy for the development and preview servers
+- `src/processors/registry.ts`: processor names, descriptions, and factory functions shown in the UI
+- `src/helpers/`: frame-processing helpers, including bbox-region mosaicing
+- `src/hooks/useWebcamProcessor.ts`: camera-stream lifecycle and frame-processing loop
+- `src/components/FrameCanvas.tsx`: original and processed frame canvases
+- `src/App.tsx`: processor selection and camera controls
+
+## Adding a processor
+
+1. Add a class implementing `Processor` under `src/processors/`.
+2. Register a unique `id`, `label`, `description`, and `create` function in `processorDefinitions`.
+3. Add controls to the processor settings area when an algorithm has adjustable parameters. Setting `requiresObject: true` displays the target-description input.
+
+The frame pipeline is `video → original canvas → ImageData → Processor.process → output canvas`. Input frames are RGBA `ImageData`, and the default `Dummy` returns the same object. Processors are synchronous and may mutate the input or return an `ImageData` with different dimensions. The original canvas is drawn before processing, so mutating the input object does not affect the original view.
+
+The second argument to `process`, `object`, is a string. `useWebcamProcessor(processor, object)` passes the current target-description value with each frame. Changes take effect on the next processing pass without restarting the camera stream. `Dummy` does not use this argument.
+
+Selecting a processor creates a new instance for subsequent frames while keeping the camera stream running. Stopping the camera or unmounting the component cleans up stream tracks and the rendering loop; the optional `reset()` method clears in-flight processor work and caches. Mosaicing runs on the browser's main thread. `Dummy` sends no frames externally; Jev processors send detection frames to TypeSafe.
 
 ## Jev · Simple decision
 
-1. `.env.example`을 `.env.local`로 복사하고 `TYPESAFE_API_KEY`에 실제 키를 설정합니다. 키는 로컬 서버에서만 읽으며 `VITE_` 접두사를 붙이지 않습니다.
-2. `pnpm dev` 또는 `pnpm build` 후 `pnpm preview`로 실행합니다.
-3. 프로세서에서 **Jev · Simple decision**을 선택하고 **Object to mosaic**에 대상 설명을 입력한 뒤 카메라를 시작합니다.
+1. Follow [Configuration](#configuration) and set `TYPESAFE_API_KEY` in `.env.local` to your actual key. The key is read only by the server; do not give it a `VITE_` prefix.
+2. Run `pnpm dev`, or run `pnpm build` followed by `pnpm preview`.
+3. Select **Jev · Simple decision**, enter a description in **Object to mosaic**, and start the camera.
 
-`process`는 동기적으로 현재 프레임을 반환합니다. 진행 중인 검출이 없을 때만 원본 프레임의 사본을 PNG로 캡처해 요청합니다. 이미지 인코딩·업로드·응답 대기 중 추가 프레임은 검출 대상으로 버리며 별도 요청 큐를 만들지 않습니다. 기본 활성화된 움직임 추적은 이 프레임들을 계속 사용해 박스를 이동시킵니다. 응답의 박스는 검출 기준 프레임에서 현재까지 보정한 후 갱신하며, 다음에 들어온 새 프레임이 다음 요청을 시작합니다. 추적을 끄면 기존처럼 최근 검출 좌표를 고정해 사용합니다.
+`process` synchronously returns the current frame. Only when no detection is in flight does it encode a copy of the original frame as PNG and send a request. Additional frames arriving during encoding, upload, or response waiting are dropped as detection inputs, with no separate request queue. Motion tracking is enabled by default and continues using these frames to move the boxes. Response boxes are advanced from their detection source frame to the current frame before being applied. The next incoming frame starts the next request. With tracking disabled, the latest detected coordinates remain fixed between detections.
 
-대상 설명·프레임 크기가 바뀌거나 카메라 중지·프로세서 교체·컴포넌트 해제가 발생하면 캐시를 비우고 기존 요청을 취소합니다. 취소가 늦게 처리돼도 이전 응답과 오류는 세대 번호로 무시합니다. 취소된 작업이 끝나기 전에는 같은 인스턴스에서 새 요청을 시작하지 않습니다.
+Changing the target description or frame dimensions, stopping the camera, switching processors, or unmounting clears caches and cancels the existing request. Generation numbers prevent stale responses and errors from being applied even if cancellation is delayed. The same instance does not start another request until the cancelled work finishes.
 
-- 모델은 `jev-preview`입니다. 한 요청에 Box 하나와 Noul 존재 여부 질의를 함께 보냅니다. 존재 확률이 `0.5` 이상이고 Box confidence가 `0.15` 이상인 유효 박스만 적용합니다. 둘 중 하나라도 기준 미만이면 캐시를 비웁니다. 정확히 경계값인 경우는 포함합니다. 이는 PoC 기본 임계값입니다. 존재한다고 답한 Box의 confidence가 누락되거나 0~1의 유한 숫자가 아니면 응답 오류로 처리합니다.
-- [Box 공식 문서](https://docs.typesafe.ai/primitives/box)의 정규화 좌표를 현재 프레임의 픽셀 bbox로 변환합니다. [이미지 규격](https://docs.typesafe.ai/images)에 맞춰 각 변을 280~1568px로 조정합니다. 작은 영상이나 극단적인 종횡비에서는 비율이 달라질 수 있으나 전체 프레임에 대한 정규화 좌표를 유지합니다.
-- 프레임은 모자이크 전에 캡처합니다. 요청하지 않는 프레임은 추가 복사·PNG 변환·업로드하지 않습니다.
-- 첫 검출 전이나 대상 설명이 비어 있으면 원본을 표시합니다. 추적이 실패하거나 꺼져 있으면 bbox는 이전 위치에 머뭅니다. 빠른 움직임의 추적이나 완전한 가림을 보장하지 않습니다.
-- 실패하면 다음 `process` 호출에서 오류를 전달해 카메라를 중지합니다. 수정 후 카메라를 다시 시작해 재시도합니다. 자동 재시도는 하지 않습니다.
-- `JEV_TIMEOUT_MS`는 서버 요청 제한 시간이며 기본 30000ms입니다. 환경값 변경은 Vite를 재시작해야 반영됩니다.
-- `/api/jev`는 Vite 개발 서버와 미리보기 서버에서 제공합니다. 정적 `dist`만 배포할 때는 같은 경로의 서버 프록시를 별도로 준비해야 합니다.
+- The model is `jev-preview`. Each request combines one Box query with a Noul presence query. Only valid boxes with presence probability at least `0.5` and Box confidence at least `0.15` are accepted. If either is below its threshold, the cache is cleared. Boundary values are included. These are PoC default thresholds. A box whose presence query passes must have a finite confidence value in the range 0–1; missing or invalid confidence is a response error.
+- Normalized coordinates from the [official Box documentation](https://docs.typesafe.ai/primitives/box) are converted to pixel bboxes for the current frame. Each image dimension is adjusted to 280–1568 pixels to match the [image requirements](https://docs.typesafe.ai/images). Small images or extreme aspect ratios may be distorted, but normalized coordinates remain relative to the entire frame.
+- Frames are captured before mosaicing. Frames not selected for a request undergo no additional full-frame copying, PNG encoding, or upload.
+- The original frame is shown before the first detection or when the target description is empty. If tracking fails or is disabled, boxes remain at their last coordinates between detections. Fast-motion tracking and complete concealment are not guaranteed.
+- A failure is propagated on the next `process` call and stops the camera. After resolving the problem, start the camera again to retry. There is no automatic retry.
+- `JEV_TIMEOUT_MS` is the server request timeout, defaulting to 30000 ms. Restart Vite after changing environment values.
+- `/api/jev` is provided by the Vite development and preview servers. Deploying only the static `dist` directory requires a separate server proxy at the same path.
 
 ## Jev · Scroll decision
 
-같은 API 키 설정으로 프로세서에서 **Jev · Scroll decision**을 선택하고 대상 설명을 입력합니다. 한 검출 주기는 다음과 같습니다.
+With the same API-key configuration, select **Jev · Scroll decision** and enter the target description. Each detection cycle works as follows:
 
-1. 원본 프레임을 PNG로 한 번만 인코딩합니다.
-2. **최초 주기에만** [Choice 질의](https://docs.typesafe.ai/primitives/choice)로 객체 수를 `0 / 1 / 2 / 3 / 4 / 5 / 6개 이상` 중 선택합니다. `0`이면 bbox 캐시를 비우고 주기를 마칩니다. 그 외에는 같은 PNG로 선택된 개수만큼의 Box 요청을 보냅니다.
-3. **다음 주기부터는 Choice를 생략**하고 `min(이전 유효 bbox 수 + 1, 6)`개의 Box를 한 요청으로 질의합니다. 각 순번의 객체가 실제로 존재하는지 확인하는 Noul도 같은 요청에 포함합니다. 각 질의는 위쪽 변의 위치를 기준으로 위→아래, 동률이면 왼쪽 변 기준 왼쪽→오른쪽으로 정렬한 N번째 객체 하나를 지정합니다. 요청 개수를 실제 총개수로 단정하는 프롬프트는 사용하지 않습니다.
-4. 순번별 존재 확률이 `0.2` 이상이고 Box confidence가 `0.1` 이상인 유효 bbox만 채택하고 그 수를 다음 주기의 기준으로 사용합니다. 정확히 경계값인 경우는 포함합니다. 예를 들어 이전 검출이 2개면 다음에는 3개를 요청하고, 필터를 통과한 박스가 1개면 다음 요청은 2개가 됩니다. 0개로 줄어도 이후 매 주기 1개를 탐색하므로 객체가 다시 나타날 수 있습니다.
-5. 응답 전체를 검증한 뒤 bbox 캐시와 개수를 한 번에 갱신합니다. 필수 존재 여부 응답 누락, 존재한다고 답한 슬롯의 잘못된 좌표·누락되거나 잘못된 confidence, 요청 실패는 오류로 처리하며 일부 bbox만 적용하지 않습니다. 존재하지 않는 슬롯의 Box는 무시합니다. 낮은 confidence 제외는 오류가 아니며, 전부 제외되면 캐시를 비우고 성공 검출 지연 표본으로 집계합니다.
+1. Encode the original frame as PNG once.
+2. **On the first cycle only**, use a [Choice query](https://docs.typesafe.ai/primitives/choice) to select `0 / 1 / 2 / 3 / 4 / 5 / 6 or more` objects. A result of `0` clears the bbox cache and ends the cycle. Otherwise, query the selected number of boxes using the same PNG.
+3. **From the next cycle onward, skip Choice** and request `min(previous valid bbox count + 1, 6)` boxes in one request. The same request includes a Noul query checking whether the object at each position actually exists. Each query targets the Nth object ordered top to bottom by its top edge, with ties broken left to right by its left edge. The prompt does not assert that the requested number is the actual total.
+4. Accept only valid boxes with per-position presence probability at least `0.2` and Box confidence at least `0.1`, and use their count as the basis for the next cycle. Boundary values are included. For example, after two valid detections, request three boxes; if only one passes the filters, request two next time. Even after the count drops to zero, subsequent cycles query one slot, allowing objects to reappear.
+5. Validate the entire response before updating the valid detection count for the next cycle. With tracking enabled, replace the displayed bbox set only after successfully advancing it to the current frame. If correction is rejected, use the new valid detection count for the next request while retaining the existing displayed tracks. With tracking disabled, replace the bbox set directly with the validated result. Missing required presence answers, invalid coordinates or missing/invalid confidence for slots whose presence query passes, and request failures are errors; boxes are not partially applied. Ignore Box answers for absent slots. Exclusion for low confidence is not an error. If every box is excluded, clear the cache and record a successful detection-latency sample.
 
-인코딩부터 마지막 응답까지 전체 주기 동안 추가 프레임은 검출 대상으로 드롭합니다. 최초에는 최대 두 번, 이후에는 한 번의 HTTP 요청을 보내며 렌더링에는 이전 주기의 bbox들을 계속 사용합니다. 응답이 끝난 뒤 들어오는 새 프레임으로 다음 주기를 시작합니다. 대상·프레임 크기 변경, 중지·교체 시 이전 개수도 초기화하므로 다음 주기는 다시 Choice부터 시작합니다. 취소된 주기의 응답은 bbox·개수·지연 측정에 반영하지 않습니다.
+Additional frames are dropped as detection inputs throughout the cycle, from encoding through the final response. The first cycle uses up to two HTTP requests; later cycles use one. Rendering continues with the previous cycle's boxes. A new frame arriving after the response starts the next cycle. Changing the target or frame size, stopping the camera, or switching processors also resets the previous count, so the next cycle starts with Choice again. Cancelled-cycle responses do not affect boxes, counts, or latency measurements.
 
-Box에는 ‘없음’ 응답이 없으므로 단순한 Box 응답 수를 실제 개수로 사용할 수 없습니다. 여기서 유효 개수는 순번별 Noul 판단·좌표 검증·confidence 기준을 통과한 bbox의 수이며, 실제 객체 수를 보장하는 값은 아닙니다. 이 구현은 모델의 존재 여부·순서 판단을 실험하는 PoC입니다. 실제로 서로 다른 객체를 모두 찾거나 중복 bbox를 피하는 정확도를 보장하지 않습니다. 한 번에 늘릴 수 있는 탐색 수는 이전 검출 수보다 1개이며 최대 6개입니다. 키 설정·프록시·타임아웃·첫 검출 전 원본 표시 동작은 Simple decision과 같습니다. 타임아웃은 각 HTTP 요청에 별도로 적용됩니다.
+Box has no “not found” response, so the number of Box answers alone cannot represent the actual object count. The valid count here means boxes passing per-position Noul, coordinate validation, and confidence filtering; it does not guarantee the true count. This PoC experiments with the model's presence and ordering judgments. It does not guarantee detection of every distinct object or avoidance of duplicate boxes. The search count can grow by only one per cycle, up to six. Key configuration, proxy, timeouts, and the original view before the first detection follow Simple decision. The timeout applies separately to each HTTP request.
 
 ## Jev · Panning decision
 
-같은 API 키 설정으로 **Jev · Panning decision**을 선택하고 대상 설명을 입력합니다. 최초 주기부터 매번 PNG를 한 번 인코딩하고, `target_1`부터 `target_6`까지 **Box 질의 6개와 Noul 질의 하나를 같은 HTTP 요청**으로 보냅니다. Noul `present`는 개수나 N번째 객체가 아니라 **이 이미지에 해당 객체가 하나 이상 존재하는가**를 묻습니다. 전체 존재 확률이 `0.5` 미만이면 Box를 모두 무시하고 캐시를 비웁니다. 정확히 `0.5` 이상이면 아래의 Box 필터를 적용합니다. Noul 응답이 누락되거나 잘못되면 오류로 처리합니다. 별도 존재 확인 왕복이나 Choice는 없으며 이전 검출 개수와 무관하게 항상 Box 6개를 요청합니다. 이미지를 타일로 나누는 방식이 아니라, Scroll과 같은 위→아래·동률이면 왼쪽→오른쪽 순서의 서로 다른 객체를 지정합니다.
+With the same API-key configuration, select **Jev · Panning decision** and enter the target description. Starting with the first cycle, encode PNG once and send **six Box queries, `target_1` through `target_6`, and one Noul query in the same HTTP request**. Noul `present` asks **whether at least one matching object is visible in this image**, not how many objects exist or whether an Nth object exists. If overall presence probability is below `0.5`, ignore all boxes and clear the cache. At `0.5` or above, apply the Box filters below. Missing or invalid Noul answers are errors. There is no separate presence-check round trip or Choice query; six boxes are always requested, regardless of the previous detection count. This does not tile the image: it targets distinct objects using the same top-to-bottom, then left-to-right ordering as Scroll.
 
-각 질의에는 해당 순번의 객체 하나만 감싸는 최소 박스를 요청하고, 그 순번이 없으면 `{ left: 0, top: 0, right: 0, bottom: 0 }`을 반환하도록 지시합니다. 네 좌표가 모두 숫자 `0`인 Box를 빈 슬롯으로 제외합니다. **Panning은 Box confidence를 적용 조건으로 사용하지 않습니다.** confidence는 분석용 로그에만 남으며, 누락되어도 좌표가 유효하면 후보로 사용합니다. Simple의 confidence `0.15`, Scroll의 `0.1` 기준은 변경하지 않습니다.
+Each query requests the tightest box around its single indexed object and instructs the model to return `{ left: 0, top: 0, right: 0, bottom: 0 }` when that position does not exist. A Box with all four coordinates equal to numeric `0` is excluded as an empty slot. **Panning does not use Box confidence as an acceptance condition.** Confidence is logged only for analysis; candidates with valid coordinates are considered even if confidence is missing. Simple's `0.15` and Scroll's `0.1` confidence thresholds remain unchanged.
 
-유효 후보를 면적이 작은 순서로 확인하여, 이미 선택한 작은 박스와 양의 면적으로 겹치는 큰 박스를 제외합니다. 겹치지 않는 후보는 크기에 관계없이 모두 유지합니다. 같은 면적이면 원래 슬롯 순서가 앞선 박스를 우선하고, 변이나 꼭짓점만 닿는 경우는 겹침으로 보지 않습니다. 큰 박스 하나가 떨어진 작은 박스 둘을 감싸면 큰 박스만 제외하고 작은 박스 둘을 유지합니다. 제외된 박스와만 겹치고 선택된 박스와는 겹치지 않는 후보는 유지하는 작은 영역 우선의 탐욕 선택이며, 최종 결과 순서는 원래 슬롯 순서를 유지합니다.
+Valid candidates are considered in ascending area order. Larger boxes overlapping an already selected smaller box with positive area are discarded. Non-overlapping candidates are kept regardless of size. Equal-area ties favor the earlier slot, and touching edges or corners do not count as overlap. If one large box encloses two separate smaller boxes, only the large box is removed. This is a greedy smaller-area-first selection: a candidate overlapping only discarded boxes, but no selected box, is retained. Final output preserves the original slot order.
 
-정상 박스가 이미지의 위쪽이나 왼쪽 경계(`top=0` 또는 `left=0`)에 닿아도 유지합니다. 6개 모두 영점이면 캐시를 비웁니다. 응답 누락·잘못된 타입·범위 밖 좌표·영점 이외의 너비나 높이 0인 박스는 오류로 처리하며 부분 적용하지 않습니다. confidence는 이 좌표 검증이나 겹침 선택에 영향을 주지 않습니다.
+Valid boxes touching the top or left image boundary (`top=0` or `left=0`) are retained. If all six slots are all-zero boxes, the cache is cleared. Missing answers, invalid types, out-of-range coordinates, and zero-width or zero-height boxes other than the all-zero sentinel are errors; results are not partially applied. Confidence does not affect coordinate validation or overlap selection.
 
-이 영점 규칙은 **프로젝트의 실험용 프롬프트 규약이지 API의 공식 ‘없음’ 응답이 아닙니다**. [Box 공식 문서](https://docs.typesafe.ai/primitives/box)는 항상 박스를 반환하고 정상 좌표는 `left < right`, `top < bottom`이라고 명시합니다. 모델이나 API가 영점 지시를 따르지 않으면 없는 객체에도 박스가 생길 수 있습니다. 전체 존재 여부 확인은 객체가 전혀 없을 때의 박스를 걸러내기 위한 것이며, 객체가 하나 있다고 해서 6개 슬롯 모두의 실제 존재를 보장하지는 않습니다. 실제로 다른 객체라도 박스가 겹치면 하나가 제외될 수 있고, 작은 후보와 겹치지 않는 큰 오검출은 그대로 남을 수 있습니다. 슬롯별 Noul·좌표 보정·재질의는 추가하지 않습니다. 결과의 실제 존재 여부·개별 객체 분리 정확도·지연 개선은 보장하지 않습니다.
+The all-zero rule is **an experimental project prompt convention, not the API's official “not found” response**. The [official Box documentation](https://docs.typesafe.ai/primitives/box) states that a box is always returned and valid coordinates satisfy `left < right` and `top < bottom`. If the model or API does not follow the all-zero instruction, nonexistent objects may still produce boxes. Overall presence checking filters boxes when no matching object exists; finding one object does not establish that all six slots exist. Boxes for genuinely different objects may suppress one another if they overlap, while large false detections not overlapping a smaller candidate may remain. No per-slot Noul, coordinate repair, or follow-up queries are added. Actual object presence, individual-object separation accuracy, and latency improvements are not guaranteed.
 
-프레임 드롭·이전 bbox 유지·취소·초기화·오류 처리는 기존 Jev 프로세서와 같습니다. 기존 지연 패널 및 p50·p90·p99 통계도 그대로 적용됩니다. 응답 로그의 각 Box 행에 같은 전체 존재 확률(`presence`)과 기준 `0.5`(`presenceThreshold`)를 표시하고 `confidenceThreshold`는 `null`입니다. 존재 확률이 기준 미만이면 모든 슬롯이 `disposition: absent`이며, 이상일 때 영점 슬롯은 `zero_box`, 작은 박스와 겹쳐 제외된 후보는 `overlap_suppressed`, 최종 선택한 후보는 `accepted`로 표시합니다. 존재하지 않음·영점·겹침 제외는 요청 실패가 아니며, 해당 주기도 성공 검출 지연 통계에 포함합니다.
+Frame dropping, retention of previous boxes, cancellation, resets, and error handling follow the other Jev processors. The same latency panel and p50/p90/p99 statistics apply. Each Box row in the response log shows the same overall presence probability (`presence`) and threshold `0.5` (`presenceThreshold`), with `confidenceThreshold` set to `null`. When presence is below the threshold, every slot has `disposition: absent`. Otherwise, all-zero slots are `zero_box`, candidates suppressed by overlap with a selected smaller box are `overlap_suppressed`, and selected candidates are `accepted`. Absence, all-zero slots, and overlap suppression are not request failures; those cycles are included in successful detection-latency statistics.
 
 ## VLM · Simple detection
 
-`docs/note.md`의 VLM 계획에 따라 기존 Jev의 비동기 프레임 처리 흐름을 공유하고, 검출 API만 OpenAI 호환 Chat Completions로 교체합니다. **VLM · Simple detection**을 선택하면 다음 모델을 고를 수 있습니다.
+This processor shares Jev's asynchronous frame-processing flow but replaces the detection API with OpenAI-compatible Chat Completions. Select **VLM · Simple detection** to choose among the model IDs currently allowed by the application:
 
-- `qwen3-vl-reap-24b-a3b` (기본)
+- `qwen3-vl-reap-24b-a3b` (initial UI selection)
 - `qwen3.6-35b-a3b-ud-mlx`
 - `gemma4-26b-a4b-qat-uncensored-hauhaucs-balanced-mtp`
 - `minicpm-v-4.7-1b@f16`
 
-기본 서버는 `http://macstudio:1234/v1`입니다. `.env.local`에서 `VLM_BASE_URL`, 선택적 `VLM_API_KEY`, `VLM_TIMEOUT_MS`(기본 120000ms)를 지정할 수 있습니다. 키와 주소는 Vite 서버에서만 사용하며 `VITE_` 접두사를 붙이지 않습니다. 환경값은 시작 시 검증되며 변경 후 Vite를 재시작해야 합니다. 모델은 UI에서 즉시 변경할 수 있고, 교체 전 요청·박스·통계는 초기화합니다. 진행 중인 요청은 시작할 때 선택한 모델을 사용하며, 이전 모델의 늦은 응답은 적용하지 않습니다.
+These are server-facing model IDs, not a guarantee that the models are installed or available. Your server must expose the exact selected ID. To use a different model ID or server alias, update the shared `vlmModels` allowlist in `src/processors/vlmProtocol.ts`; changing `VLM_BASE_URL` alone does not allow arbitrary model IDs. The server must support image inputs and the structured-output request used below.
 
-1. 원본 프레임을 종횡비 유지·업스케일 없이 최대 `1280×720` PNG로 줄입니다. 자르기나 패딩은 하지 않습니다.
-2. 브라우저는 같은 출처의 `/api/vlm`에 모델·대상 설명·PNG를 보내고, 서버가 설정된 `/chat/completions`로 전달합니다. 서버는 위 목록의 모델만 허용하며, 브라우저가 임의의 주소·프롬프트·생성 옵션을 전달할 수 없습니다.
-3. `temperature: 0`, `max_tokens: 1024`, `stream: false`와 strict JSON Schema를 사용합니다. 객체마다 독립적인 최소 bbox를 요청하며, 없으면 `{"boxes":[]}`, 최대 20개를 받습니다. 좌표는 정수 `0~1000`이며 양의 너비·높이를 검증한 뒤 `0~1`로 정규화하여 원본 프레임에 모자이크합니다. 별도 confidence·존재 확률·겹침 필터는 적용하지 않습니다.
-4. 검출 중 들어온 프레임은 검출 대상으로 드롭하고, 화면에는 최근 bbox를 계속 적용합니다. 빈 배열은 박스 캐시를 비웁니다. 최초 검출 전에는 원본이 보이며 움직임 추적이나 완전한 가림을 보장하지 않습니다.
-5. 응답의 `finish_reason`은 `stop`이어야 하며 `message.content` 전체를 JSON으로 검증합니다. 잘못된 좌표·너비나 높이가 0 이하인 박스는 `vlm_box_rejected` 경고로 좌표·배열 인덱스(0부터)·제외 사유를 남기고 건너뛰며, 같은 응답의 정상 박스는 적용합니다. 모든 박스가 잘못됐거나 JSON·응답 형식이 잘못됐거나 출력이 잘린 경우에는 `vlm_error`에 `recoverable: true`와 사유를 기록하고 이전 박스를 유지한 채 다음 프레임에서 새 검출을 시작합니다. 이 경우 성공 지연 표본은 추가하지 않으며 카메라도 중지하지 않습니다. 정상적인 `{"boxes":[]}` 응답은 기존처럼 캐시를 비웁니다. HTTP·네트워크·인코딩 실패는 여전히 카메라를 중지합니다. Qwen3.6에서 content가 비면 LM Studio의 모델 채팅 템플릿에서 thinking을 꺼야 합니다. 해당 런타임에서 요청 옵션만으로 thinking이 꺼진다고 가정하지 않습니다.
+Set `VLM_BASE_URL` to your server's API base URL as shown in [Configuration](#configuration). `VLM_API_KEY` is optional, and `VLM_TIMEOUT_MS` defaults to 120000 ms. The URL and key are used only by the Vite server; do not use a `VITE_` prefix. Environment values are validated at startup, and changes require restarting Vite. Models can be changed immediately through the UI; switching resets in-flight requests, boxes, and statistics. A request uses the model selected when it began, and late responses from the previous model are not applied.
 
-Jev와 같은 지연·p50·p90·p99 패널을 사용하며, 리사이징·인코딩부터 API 응답 검증까지를 포함합니다. `[Pixelveil][VLM]` 콘솔과 기존 **Export logs / 로그 내보내기** 버튼에서 응답 박스·적용 박스·모델·지연을 확인할 수 있습니다. VLM 이벤트에는 `provider: "VLM"`과 `model`이 있으며, 같은 검출 주기는 `traceId`로 연결됩니다. 이미지·대상 설명·인증 정보는 로그에 저장하지 않습니다. Jev와 VLM 로그는 최근 3,000개 이벤트 버퍼를 공유하며, VLM 이벤트가 포함된 파일은 `pixelveil-detection-<UTC 시각>.json`입니다.
+1. Resize the original frame to fit within `1280×720` and encode it as PNG, preserving aspect ratio without upscaling, cropping, or padding.
+2. The browser sends the model, target description, and PNG to the same-origin `/api/vlm` endpoint. The server forwards them to its configured `/chat/completions` endpoint. Only the models listed above are allowed; the browser cannot provide arbitrary URLs, prompts, or generation options.
+3. Use `temperature: 0`, `max_tokens: 1024`, `stream: false`, and a strict JSON Schema. Request an independent tight bbox for each object, up to 20 boxes, or `{"boxes":[]}` when none exist. Coordinates must be integers from `0–1000`; after validating positive width and height, normalize them to `0–1` for mosaicing the original frame. No additional confidence, presence-probability, or overlap filters are applied.
+4. Frames arriving during detection are dropped as detection inputs, while the latest boxes continue to be applied to the displayed frames. An empty array clears the box cache. The original frame is shown before the first detection; reliable motion tracking and complete concealment are not guaranteed.
+5. The response's `finish_reason` must be `stop`, and the entire `message.content` is validated as JSON. Boxes with invalid coordinates or non-positive width or height are skipped, with `vlm_box_rejected` warnings containing coordinates, zero-based array index, and rejection reason. Valid boxes from the same response are accepted. If every box is invalid, the JSON or response format is invalid, or output is truncated, `vlm_error` records `recoverable: true` and the reason. Previous boxes are retained, and a new detection starts on a subsequent frame. These errors neither add successful latency samples nor stop the camera. A valid `{"boxes":[]}` still clears the cache. HTTP, network, and encoding failures still stop the camera. When using LM Studio with Qwen3.6, empty content may require disabling thinking in the model's chat template; request options alone should not be assumed to disable it. Other servers may require different model-template or reasoning settings.
 
-`/api/vlm`도 Vite 개발·미리보기 서버에서만 제공됩니다. 정적 `dist`만 배포한다면 별도 서버 프록시가 필요합니다. `VlmProcessor`와 `JevProcessor`는 `AsyncDetectionProcessor`의 프레임 드롭·박스 캐시·취소·통계를 공유합니다.
+This processor uses the same latency and p50/p90/p99 panel as Jev. Total detection latency includes copying the original frame, any enabled embedding pre-check, resizing and encoding, API response validation, and completion or rejection of catch-up when tracking is enabled. See Detection latency below for measurement boundaries. The `[Pixelveil][VLM]` console logs and **Export logs** button expose response boxes, applied boxes, model, and latency. VLM events include `provider: "VLM"` and `model`; `traceId` links events from the same detection cycle. Images, target descriptions, and credentials are not logged. Jev and VLM share the most recent 3,000-event buffer. Exports containing VLM events are named `pixelveil-detection-<UTC timestamp>.json`.
 
-## 임베딩 사전 검사
+`/api/vlm` is also provided only by the Vite development and preview servers. A static-only `dist` deployment needs a separate server proxy. `VlmProcessor` and `JevProcessor` share frame dropping, box caching, cancellation, and statistics through `AsyncDetectionProcessor`.
 
-Jev 또는 VLM을 선택한 뒤 **Use embedding pre-check / 임베딩 사전 검사 사용**을 켜면 bbox 검출 전에 대상 설명과 프레임의 코사인 유사도를 비교합니다. 기본은 꺼짐이며 **Cosine similarity threshold / 코사인 유사도 임계값**을 `-1~1` 범위에서 즉시 조절할 수 있습니다. 기본 `0.65`는 보정되지 않은 실험용 시작값이지 객체 존재 확률이나 검증된 최적 임계값이 아닙니다. 대상·배경별 실제 점수를 보고 평가해야 하며, 작은 객체는 전체 이미지 임베딩에 잘 반영되지 않아 검출을 놓칠 수 있습니다.
+## Embedding pre-check
 
-1. 대상 설명은 `/api/embedding`을 통해 텍스트 임베딩(`input_type: query`)을 받아 메모리에 캐시합니다. 디스크·localStorage에는 저장하지 않습니다.
-2. 검출할 원본 프레임의 사본을 만들고, 종횡비를 유지하여 최대 `320×320` PNG로 줄인 뒤 이미지 임베딩을 받습니다. 720p 입력은 `320×180`입니다. bbox 검출기에도 모자이크 전의 동일한 원본 사본을 전달합니다.
-3. 같은 모델·같은 차원의 두 벡터를 정규화하여 코사인 유사도를 계산합니다. `score >= threshold`일 때만 기존 bbox 검출기를 호출합니다. 임계값 미만이면 bbox 요청을 생략하고 이전 박스 캐시를 비웁니다.
-4. 임베딩부터 bbox 검출 완료까지 한 번에 한 주기만 처리하고, 대기 중 새 프레임은 검출 대상으로 드롭합니다. 화면 렌더링은 계속되며 대기 중에는 기존 박스를 유지합니다. 임베딩 서버 오류·유효하지 않은 벡터는 부재로 간주하지 않고 이전 박스를 유지한 채 다음 프레임에서 다시 시도합니다. 오류는 로그에 남기며 카메라를 중지하지 않습니다.
+This integration was implemented and tested with [snowmerak/oev](https://github.com/snowmerak/oev), serving EmbeddingGemma2 under the local model alias `embeddinggemma2`. The alias is a deployment setting, not a universal model identifier. See [oev's embedding documentation](https://github.com/snowmerak/oev#embeddings) for server setup and model configuration.
 
-기본 임베딩 API는 `http://macstudio:12821/v1`, 모델은 `embeddinggemma2`입니다. 제공 서버의 [API 사용 문서](http://macstudio:12821/.skill)에 맞춰 첫 요청 전에 `/models`에서 `task: embedding` 및 텍스트·이미지 지원을 확인하고 `/embeddings`로 보냅니다. 첫 성공 확인은 Vite 실행 동안 캐시합니다. `.env.local`에서 `EMBEDDING_BASE_URL`, `EMBEDDING_MODEL`, 선택적 `EMBEDDING_API_KEY`, `EMBEDDING_TIMEOUT_MS`(기본 30000ms)를 설정하며, 변경 시 Vite를 재시작합니다. 키는 서버에서만 사용합니다. 개발·미리보기 서버 모두 `/api/embedding`을 제공하며 정적 배포에는 별도 프록시가 필요합니다.
+The model-discovery metadata, image-input format, and query-prefix option described here are part of the oev integration. This is not a claim of compatibility with every OpenAI-style embeddings endpoint. Changing the host address does not remove these API requirements; another server needs an equivalent contract or an adapter.
 
-UI의 활성화·임계값·모델 변경은 다음 프레임부터 반영되며, 대상·프레임 크기 변경이나 카메라 중지와 마찬가지로 진행 중인 요청·대상 임베딩·박스·통계를 초기화합니다. Dummy에서는 사전 검사를 하지 않습니다. 원격 임베딩을 켜면 bbox 요청을 생략한 프레임도 임베딩 서버에는 전송됩니다. 임베딩만큼의 추가 왕복이 들기 때문에 이미 대부분의 프레임에 대상이 있으면 전체 검출 지연이 오히려 늘 수 있습니다.
+After selecting Jev or VLM, enable **Use embedding pre-check** to compare the cosine similarity of the target description and frame before bbox detection. It is disabled by default. **Cosine similarity threshold** can be adjusted immediately within `-1–1`. The default `0.65` is an uncalibrated experimental starting point, not an object-presence probability or a validated optimal threshold. Evaluate actual scores for each target and background. Small objects may contribute little to the whole-image embedding and can be missed.
 
-영상 아래 통계 패널에는 **임베딩 사전 검사 자체의 최신 지연·p50/p90/p99**, 텍스트 임베딩(캐시 사용 시 0ms)·프레임 인코딩 및 임베딩·벡터 비교 시간, 유사도, 통과·생략·오류 수를 표시합니다. 사전 검사 통계에는 통과 및 생략된 성공 주기를 모두 넣고 오류·취소는 제외합니다. 기존 검출 지연 통계는 임베딩과 bbox 검출까지 성공한 주기의 전체 시간이며 생략된 주기는 넣지 않습니다. 둘 다 최근 최대 1,000개 표본이며 표본 100개 미만의 p99는 최댓값입니다. 카운터는 초기화 이후 누적 성공 통과·생략 및 오류 횟수입니다.
+1. Request a text embedding for the target description through `/api/embedding` using `input_type: query`, and cache it in memory. It is not saved to disk or localStorage.
+2. Copy the original detection frame, resize it to fit within `320×320` while preserving aspect ratio, encode it as PNG, and request its image embedding. A 720p input becomes `320×180`. The bbox detector receives the same original, pre-mosaic copy.
+3. Normalize both vectors from the same model with the same dimensions and compute cosine similarity. Call the existing bbox detector only when `score >= threshold`. Below the threshold, skip the bbox request and clear the previous box cache.
+4. Process only one cycle at a time, from embedding through bbox detection, and drop incoming frames as detection inputs while waiting. Rendering continues with the existing boxes. Embedding-server errors or invalid vectors are not treated as object absence: retain the previous boxes and retry on a subsequent frame. Errors are logged without stopping the camera.
 
-기존 JSON 내보내기에 `embedding_gate`(점수·임계값·통과 여부·캐시 사용·단계별 지연·통계), `frame_skipped`(bbox 생략 및 박스 제거), `embedding_error` 이벤트를 추가합니다. 같은 주기의 임베딩과 bbox 응답·박스 적용은 동일한 `traceId`를 사용합니다. 이미지·대상 설명·벡터·인증 정보는 기록하지 않습니다. 임베딩 이벤트가 있으면 파일명은 `pixelveil-detection-<UTC 시각>.json`입니다.
+Set `EMBEDDING_BASE_URL` to your oev server's API base URL and `EMBEDDING_MODEL` to the model's configured `served_model` name, as shown in [Configuration](#configuration). `EMBEDDING_API_KEY` is optional, and `EMBEDDING_TIMEOUT_MS` defaults to 30000 ms. The implementation's fallback model ID is the `embeddinggemma2` alias used in the tested deployment; Pixelveil does not install its checkpoint. An alternative must support both text and images in a shared embedding space and satisfy the oev contract below.
 
-## 검출 사이의 움직임 추적
+The proxy checks `/models` before the first embedding request. The response must contain a `data` array with an entry whose `id` matches `EMBEDDING_MODEL`, whose `task` is `embedding`, and whose `input_modalities` includes both `text` and `image`. It then posts to `/embeddings` with `model` and `encoding_format: "float"`. Text requests use a string `input` and `input_type: "query"`; image requests use `input: { image: <PNG data URL> }`. Responses must identify the configured model and contain valid embedding vectors. A text-only embedding server or an API using a different image-input or discovery format is not interchangeable without an adapter. The first successful capability check is cached for the lifetime of the Vite process. Restart Vite after environment changes. Keys are server-side only; development and preview expose `/api/embedding`, while static deployments require a separate proxy.
 
-Jev 세 전략과 VLM 모두 **Track motion between detections / 검출 사이의 움직임 추적**이 기본으로 켜집니다. UI에서 끄면 기존 고정 bbox 방식으로 비교할 수 있습니다. 설정 변경은 프로세서를 교체하고 기존 요청·임베딩 캐시·박스·통계를 초기화하며, 카메라 스트림은 유지합니다. `Processor.process(ImageData, object): ImageData` 계약은 바꾸지 않았습니다. **입출력 영상은 항상 현재 프레임이며, 과거 영상으로 교체하거나 검출 응답을 기다리며 화면을 멈추지 않습니다.**
+UI changes to enablement, threshold, or model take effect on subsequent frames and reset in-flight requests, target embeddings, boxes, and statistics, just like target/frame-size changes or stopping the camera. Dummy does not run the pre-check. Enabling remote embeddings sends frames to the embedding server even when their bbox requests are skipped. The additional embedding round trip can increase total detection latency when most frames already contain the target.
 
-각 입력 프레임에는 프로세서 인스턴스 내에서 증가하는 ID와 브라우저 캡처 시각(`performance.now()`)을 부여합니다. 검출 요청에는 모자이크 전 원본 사본을 보존하고, 임베딩·bbox 검출은 같은 사본을 사용합니다. 별도로 매 프레임 최대 `320×240`(720p 입력은 `320×180`) 그레이스케일 영상을 계산합니다. 원본 이력은 **최대 5초·180프레임·16MiB 중 먼저 도달하는 한도**로 제한합니다. 따라서 60fps에서는 프레임 수 제한으로 약 3초 이력이 남으며, 원본 RGBA 영상 전체를 이력에 보관하지 않습니다. 광류 피라미드는 OpenCV가 계산 시 내부에서 생성합니다.
+The statistics panel below the video shows **the embedding pre-check's own latest latency and p50/p90/p99**, text-embedding time (0 ms when cached), frame-encoding and embedding time, vector-comparison time, similarity, and passed/skipped/error counts. Pre-check statistics include successful passed and skipped cycles, excluding errors and cancellations. Total detection-latency statistics include cycles that pass embedding and successfully validate the bbox response; with tracking enabled, elapsed time through catch-up completion or rejection is included too. Cycles skipped by embedding are not included. Both latency windows retain at most 1,000 samples, and p99 is the maximum with fewer than 100 samples. Counters accumulate successful passes, skips, and errors since reset.
 
-- 특징점 검출과 희소 광류는 OpenCV.js 4.12.0의 `cv.goodFeaturesToTrack()`·`cv.calcOpticalFlowPyrLK()`를 사용합니다. 배포 의존성은 `@techstark/opencv-js@4.12.0-release.1`로 고정하며 자체 LK 구현은 사용하지 않습니다. 추가 모델이나 WebGPU 없이 브라우저 CPU/WASM으로 실행합니다. 박스당 최대 32개 특징점을 검출하며, LK는 21×21 윈도·최대 피라미드 레벨 3·최대 30회 반복을 사용합니다. 전후방 일치 검사와 이상점을 제외한 유사 변환 추정은 기존 TypeScript 코드로 유지합니다. 회전된 네 꼭짓점을 유지하고 출력할 때만 축 정렬 bbox를 계산해 회전 때마다 박스가 누적 팽창하는 것을 피합니다.
-- OpenCV는 추적을 처음 사용할 때 별도 청크로 지연 로딩하고 같은 페이지에서 런타임을 공유합니다. 실행 시 외부 CDN에 의존하지 않으며 Dummy·추적 비활성 상태에서는 로딩하지 않습니다. 로딩 중에도 현재 영상은 계속 표시합니다. 로딩·초기화가 실패하거나 30초를 넘으면 처리 오류를 표시하며, 페이지를 새로고침하거나 추적을 끄고 카메라를 다시 시작할 수 있습니다. 자체 LK로 자동 폴백하지 않습니다. 따라잡기 200ms 제한은 초기화를 마친 후부터 측정하며, 전체 검출 지연에는 초기화 대기도 포함합니다. 임시 `cv.Mat`는 정상·실패 경로 모두 `finally`에서 해제하고 이력에는 JavaScript 그레이스케일 배열만 보관합니다.
-- 늦은 bbox가 도착하면 해당 프레임에서 특징점을 초기화하고 이력을 따라 현재까지 재생합니다. 보정 중에도 기존 트랙으로 현재 영상을 계속 출력합니다. 따라잡기는 작은 작업 단위로 이벤트 루프에 양보하고, 기본 200ms 작업 제한 내에서 최신 프레임까지 도달했을 때만 새 박스 집합을 한 번에 적용합니다.
-- 기준 프레임이 이력에서 사라졌거나, 보정 중 특징점을 잃었거나, 작업 제한을 넘으면 과거 좌표를 현재 좌표인 것처럼 적용하지 않습니다. 기존 트랙은 유지하고 다음 검출 주기를 시작합니다. 초기 검출도 보정하지 못했다면 새로 적용할 박스가 없을 수 있습니다.
-- 이미 적용된 트랙이 특징점을 잃거나 입력 프레임 간격이 250ms를 넘으면, 영상을 멈추는 대신 **마지막 좌표를 유지**하고 추적 실패로 표시합니다. 이는 객체의 부재 판정이 아니며 움직이는 대상을 계속 가린다는 보장은 없습니다. 다음에 현재까지 보정 가능한 검출이 도착하면 다시 초기화합니다.
-- 정상적인 빈 bbox 응답과 임베딩 임계값 미통과는 기존 정책대로 박스·트랙을 지웁니다. 따라서 폰 옆면에서 임베딩이 미통과하는 문제는 추적 추가만으로 해결되지 않습니다. Scroll의 다음 요청 개수는 추적 특징점이나 화면 내 박스 수가 아니라 이전 유효 **검출 결과 수**를 사용합니다.
+JSON exports include `embedding_gate` (score, threshold, pass decision, cache use, stage timings, and statistics), `frame_skipped` (bbox request skipped and boxes removed), and `embedding_error` events. Embedding, bbox responses, and box application in the same cycle share a `traceId`. Images, target descriptions, vectors, and credentials are not logged. Exports containing embedding events are named `pixelveil-detection-<UTC timestamp>.json`.
 
-`src/tracking/openCvModule.ts`는 지연 로딩용 ESM 어댑터입니다. 이 버전의 OpenCV 런타임 자체에 `then` 메서드가 있으므로, 런타임이나 이를 펼친 네임스페이스를 Promise 결과로 직접 반환하지 않고 `{ cv }`로 감쌉니다. 이 래퍼를 없애고 패키지를 직접 동적 import하면 번들러의 CommonJS 변환과 Promise 처리가 충돌할 수 있습니다.
+## Motion tracking between detections
 
-하단 통계 패널에는 추적 상태, 추적 중인 박스와 마지막 좌표를 유지 중인 박스 수, 프레임당 처리 시간을 표시합니다. 상세를 펼치면 추적 p50/p90/p99, 최근 처리 프레임 ID·검출 기준 ID, 따라잡기 시간, 보정 실패 수와 이력 개수를 볼 수 있습니다. 추적 통계는 최근 최대 1,000프레임이며, 대기 상태의 이력 생성 비용도 포함합니다. React 구독은 프레임마다 갱신하지 않고 약 250ms 간격 또는 상태 전환 시 갱신합니다. 따라잡기 비용은 별도로 표시합니다. 실제 웹캠 처리 속도는 기기·대상 수에 따라 달라집니다.
+All three Jev strategies and VLM enable **Track motion between detections** by default. Turn it off in the UI to compare against fixed bbox coordinates. Changing this setting replaces the processor and resets existing requests, embedding caches, boxes, and statistics without restarting the camera stream. The `Processor.process(ImageData, object): ImageData` contract is unchanged. **Input and output video always use the current frame; old video frames are not substituted, and rendering does not wait for detection responses.**
 
-JSON 로그의 `boxes_applied`에는 검출 당시 `detectedBoxes`·`detectedBoxCount`와 보정 후 `boxes`·`pixelBoxes`를 구분해 기록합니다. `sourceFrameId`·`sourceCapturedAtMs`는 요청에 쓴 프레임, `appliedFrameId`는 보정을 끝낸 가장 최근 처리 프레임입니다. `trackingCorrection`에는 적용 여부·재생한 프레임 수·따라잡기 시간이 들어갑니다. `detectorLatencyMs`는 임베딩·검출까지, 기존 `detectionLatencyMs`는 따라잡기까지 포함합니다. 둘 다 원본 캡처·실시간 추적·모자이크 렌더링 시간은 제외합니다. 좌표 보정 실패는 `detection_not_applied`, 실시간 추적 실패 전환은 `tracking_lost`로 기록하며 모든 프레임을 로그에 남기지는 않습니다. 유효한 API 응답이 좌표 보정에서 거절된 주기는 검출 지연 표본에는 포함하지만 새 박스를 적용한 주기로 세면 안 됩니다.
+Each input frame receives an ID increasing within the processor instance and a browser capture timestamp from `performance.now()`. Detection requests preserve a pre-mosaic copy of the original frame, shared by embedding and bbox detection. Separately, each frame is converted to grayscale at up to `320×240` (`320×180` for 720p input). Source history is limited to **5 seconds, 180 frames, or 16 MiB, whichever is reached first**. At 60 fps, the frame-count limit therefore retains roughly three seconds. Full original RGBA frames are not stored in history. OpenCV builds optical-flow pyramids internally during computation.
 
-## 검출 지연 표시
+- Feature detection and sparse optical flow use OpenCV.js 4.12.0 Shi–Tomasi detection (`cv.goodFeaturesToTrack()`, Harris disabled) and pyramidal LK tracking (`cv.calcOpticalFlowPyrLK()`). The dependency is pinned to `@techstark/opencv-js@4.12.0-release.1`; no custom LK implementation is used. Processing runs on browser CPU/WASM without extra models or WebGPU. Each box has up to 32 feature points. LK uses a 21×21 window, maximum pyramid level 3, and up to 30 iterations. Forward–backward consistency checks and outlier-resistant similarity-transform estimation are custom TypeScript code. Rotated corners are preserved, and an axis-aligned bbox is computed only for output. This avoids geometric inflation caused by repeatedly rotating an already axis-aligned rectangle; it does not prevent cumulative enlargement from estimation errors.
+- OpenCV is lazy-loaded as a separate chunk on first use of tracking, with one shared runtime per page. It does not depend on an external CDN and is not loaded for Dummy or when tracking is disabled. Current video continues during loading. Initial loading/initialization failures or a 30-second timeout are first logged to the console. If initialization failure is subsequently propagated while correcting a valid detection response, a processing error stops the camera. Errors are not immediately propagated to the camera when correction is never reached, such as when embedding keeps skipping detection. Failed initialization is not retried within the same page; reload the page, or disable tracking and restart the camera. There is no fallback to custom LK. The 200 ms catch-up limit starts after initialization, while total detection latency includes initialization waiting. Temporary `cv.Mat` objects are deleted in `finally` on both success and failure; history contains only JavaScript grayscale arrays.
+- When delayed boxes arrive, initialize features in their source frame and replay the history to the current frame. Existing tracks continue to drive current video during correction. Catch-up yields to the event loop after roughly 6 ms of work and replaces the entire existing track set with the new boxes only after reaching the latest frame within the default 200 ms elapsed-time limit. This is not a limit on a single LK call: it includes feature initialization, tracking across multiple frames, yields, and scheduling waits. Frames arriving during yields must also be caught up, and catch-up shares the main thread with live tracking and rendering. The limit is checked between frame-processing steps, so rejection can occur after more than 200 ms.
+- If the source frame has expired from history, features are lost during correction, or the time budget is exceeded, past coordinates are not applied as if they were current. Existing tracks remain, and another detection cycle follows. If even the initial detection cannot be corrected, no new boxes may be available to display.
+- If an applied track loses its features or the input-frame interval exceeds 250 ms, **hold its last coordinates** and report tracking loss rather than freezing the video. This is not an object-absence decision and does not guarantee continued concealment of a moving target. Held coordinates have no time-based expiry. A later detection that can be advanced to the current frame reinitializes tracking; empty detections, failed embedding thresholds, and resets remove the tracks.
+- Valid empty bbox responses and embedding-threshold failures clear boxes and tracks under the existing policy. Tracking alone therefore does not resolve embedding rejection when only a phone's edge is visible. Scroll's next request count uses the previous valid **detection result count**, not the number of tracking features or displayed boxes.
 
-전체 UI 하단의 통계 패널에 최근 성공적으로 완료된 Jev 검출 주기의 경과 시간을 밀리초(`ms`)로 표시합니다. 패널은 영상을 가리지 않는 일반 레이아웃이며 넓은 화면에서는 통계 항목을 나란히, 좁은 화면에서는 세로로 배치합니다. `performance.now()`로 검출 시작부터 bbox 응답 검증 완료까지 측정하며, PNG 인코딩·업로드·서버 프록시·API 왕복이 포함됩니다. Scroll의 최초 주기는 개수 확인과 Box 요청을 모두 포함하고, 최초에 0개 응답이면 개수 확인 완료까지 측정합니다. 이후에는 Box·존재 여부를 묶은 단일 요청 시간을 포함합니다. 카메라 캡처와 모자이크 렌더링 시간은 포함하지 않습니다.
+This combination tracks features; it is not an object-mask or semantic object tracker. Features are selected inside the bbox without separating the target from the background. When fewer than 20 points remain, points are replenished inside the current tracked region. Mixed background, hand, and target motion can produce an incorrect similarity transform or introduce more background points during replenishment. Per-frame scale is limited to `0.75–1.33` and rotation to ±30 degrees, but there is no limit on cumulative scale or region size relative to the initial detection. Drift or abnormal box enlargement can therefore occur without `lost`, and repeated rejection of new detection corrections can leave incorrect tracks active. These are known limitations of the current implementation.
 
-다음 요청이 진행 중이어도 최근 완료 값을 유지합니다. 첫 응답 전, Dummy 선택, 대상·프레임 크기 변경, 카메라 중지·프로세서 교체 시에는 `—`로 표시합니다. 취소·실패·이전 세대 응답은 새 측정값으로 반영하지 않습니다. 표시값은 검출 완료·초기화 시에만 구독을 통해 갱신하므로 매 프레임 React 렌더링을 유발하지 않습니다.
+`src/tracking/openCvModule.ts` is an ESM adapter for lazy loading. This OpenCV runtime has its own `then` method, so the runtime or a namespace spreading it is not returned directly as a Promise result; it is wrapped in `{ cv }`. Removing this wrapper and dynamically importing the package directly can cause conflicts between the bundler's CommonJS conversion and Promise handling.
 
-같은 패널에 최근 **성공적으로 완료된 최대 1,000개 검출 주기**의 `p50`, `p90`, `p99`와 표본 수를 표시합니다. 1,000개를 넘으면 가장 오래된 표본부터 제외합니다. 각 주기를 하나의 표본으로 집계하며, 0개 검출도 성공 표본에 포함하지만 드롭 프레임·실패·취소·이전 세대 응답은 제외합니다. 최초 Scroll 주기도 포함합니다. 프로세서별로 집계하며 기존 지연 표시와 같은 조건에서 초기화합니다. 영구 저장하지 않습니다.
+The bottom statistics panel shows tracking status, tracked and held box counts, and per-frame processing time. Expand the details to see tracking p50/p90/p99, the latest processed frame ID, detection source ID, catch-up time, rejected-correction count, and history size. Tracking statistics cover at most the latest 1,000 frames and include history-generation cost while waiting for detection. React subscriptions update approximately every 250 ms or on state transitions, not on every frame. Catch-up cost is displayed separately. Actual webcam performance depends on the device and number of targets.
 
-백분위수는 반올림 전 밀리초 표본을 오름차순 정렬하고 `ceil(표본 수 × 백분위) - 1` 인덱스의 값을 고르는 nearest-rank 방식입니다. 표본이 없으면 `—`, 하나면 세 백분위수가 모두 해당 값입니다. 표본 100개 미만에서는 p99가 최댓값이므로 꼬리 지연을 안정적으로 추정하기에는 부족하다는 안내를 표시합니다. `Processor.getDetectionLatencyStatistics()`로 현재 통계 스냅샷을 읽을 수 있고, 콘솔의 `boxes_applied.latencyStatistics`에도 `sampleCount`, `latestMs`, `p50Ms`, `p90Ms`, `p99Ms`를 기록합니다. 콘솔에는 반올림 전 값이 남고 UI만 정수 `ms`로 표시합니다.
+In JSON logs, `boxes_applied` distinguishes original detections (`detectedBoxes`, `detectedBoxCount`) from corrected output (`boxes`, `pixelBoxes`). `sourceFrameId` and `sourceCapturedAtMs` identify the request frame; `appliedFrameId` identifies the latest processed frame reached by correction. `trackingCorrection` records application status, replayed frame count, and catch-up time. `detectorLatencyMs` covers the original-frame copy, embedding, and detection; `detectionLatencyMs` additionally covers catch-up through completion or rejection. Neither directly measures the camera capture/live-tracking work immediately before the request or the resulting mosaic/output work itself. However, these are elapsed-time measurements: tracking and rendering of other frames during request/correction waits, and event-loop scheduling, affect them. They are not pure API timings or pure LK CPU timings. Rejected coordinate corrections are logged as `detection_not_applied`; transitions to live tracking loss are logged as `tracking_lost`. Not every frame is logged. A cycle with a valid API response rejected during coordinate correction is included in detection-latency samples, but must not be counted as a cycle that applied new boxes.
 
-## Jev 응답 로그
+## Detection latency
 
-브라우저 개발자 도구(F12)의 **Console**에서 `[Pixelveil][Jev]`로 필터링합니다. 기본 Info 로그 수준에서 볼 수 있으며 서버 터미널이 아닌 브라우저 콘솔에 출력됩니다.
+The statistics panel at the bottom of the UI shows the latest Jev or VLM detection cycle's total elapsed time in milliseconds (`ms`). It uses normal layout without covering the video: statistics appear side by side on wide screens and vertically on narrow screens. Measurement uses `performance.now()`, starting just before copying the original frame and ending immediately after bbox response validation and, when enabled, completion or rejection of tracking catch-up. It includes any enabled embedding pre-check, resizing, PNG encoding, upload, server proxy, API round trips, and OpenCV initialization waiting in the correction stage. With tracking disabled, measurement ends after bbox response validation. The initial Scroll cycle includes count detection and any required Box request; zero-object responses are also normal completions. Cycles skipped by embedding are not detection-latency samples. This is neither camera-to-display end-to-end latency nor the pure CPU time of individual stages.
 
-- `response <requestId>` 그룹: 펼치면 요청 시간(`requestLatencyMs`), Choice 결과(`countChoice`), 요청·채택 bbox 수와 좌표 표를 볼 수 있습니다. 좌표는 API의 정규화 값(0~1)이며, `confidence`와 순번별 존재 확률(`presence`), 적용 기준(`confidenceThreshold`, `presenceThreshold`)도 함께 표시합니다.
-- 표의 `disposition`: `accepted`는 좌표 검증과 해당 전략의 채택 조건을 통과한 슬롯, `absent`는 존재 확률이 Simple·Panning `0.5` 또는 Scroll `0.2` 기준 미만, `zero_box`는 Panning의 영점 슬롯, `overlap_suppressed`는 Panning에서 선택한 작은 박스와 겹쳐 제외된 후보, `low_confidence`는 Box confidence가 Simple `0.15` 또는 Scroll `0.1` 기준 미만인 박스, `invalid`는 응답 누락·잘못된 값, `ignored_cancelled`는 취소된 요청의 응답입니다. `invalid` 슬롯이 있으면 응답 전체가 실패할 수 있으므로 `accepted` 표시는 최종 적용 여부와 다릅니다. Panning의 `presence`는 각 슬롯의 존재 여부가 아니라 모든 행이 공유하는 전체 존재 확률이며, confidence 필터는 사용하지 않습니다.
-- `boxes_applied`: 실제 bbox 캐시에 반영한 정규화 좌표(`boxes`), 원본 프레임 기준 픽셀 좌표(`pixelBoxes`), 개수(`boxCount`), 프레임 크기, 전체 검출 시간(`detectionLatencyMs`)입니다. 픽셀 좌표는 모자이크 헬퍼의 반올림·경계 처리 전 값입니다. 같은 검출 주기의 개수·Box 응답과 적용 결과는 `traceId`로 연결됩니다. HTTP 요청마다 `requestId`는 다릅니다.
-- `response_error` / `invalid_response`: HTTP 오류 상태나 JSON 해석 실패를 확인합니다.
+The latest completed value remains visible while the next request is in flight. The display shows `—` before the first response, for Dummy, and after target/frame-size changes, camera stop, or processor replacement. Cancelled, failed, or stale-generation responses do not update the measurement. Detection-latency values update through subscriptions only on completion or reset, so measuring them does not trigger per-frame React rendering.
 
-로그는 요청 응답·검출 완료 시에만 출력하며 드롭되는 프레임마다 기록하지 않습니다. 이미지·대상 설명·API 키·인증 헤더는 기록하지 않고, 좌표 등 필요한 필드만 출력합니다.
+The same panel shows `p50`, `p90`, `p99`, and sample count for the latest **up to 1,000 detection cycles completed with valid API responses**. Once full, the window discards the oldest samples. Each cycle contributes one sample, including zero detections and cycles whose coordinate correction is rejected. Dropped frames, embedding skips, request/response-validation errors, cancellations, and stale-generation responses are excluded. Initial Scroll cycles are included. Statistics are maintained per processor and reset under the same conditions as the latency display. They are not persisted.
 
-### JSON 내보내기
+Percentiles use nearest rank: sort unrounded millisecond samples in ascending order and select index `ceil(sample count × percentile) - 1`. With no samples, show `—`; with one, all three percentiles equal that sample. For fewer than 100 samples, p99 is the maximum, so the UI warns that the sample is too small for a stable tail-latency estimate. Read the current snapshot through `Processor.getDetectionLatencyStatistics()`. Console `boxes_applied.latencyStatistics` also includes `sampleCount`, `latestMs`, `p50Ms`, `p90Ms`, and `p99Ms`. Console values remain unrounded; only the UI displays integer milliseconds.
 
-하단 통계 패널의 **Export logs / 로그 내보내기** 버튼으로 `pixelveil-jev-<UTC 시각>.json`을 다운로드할 수 있습니다. 버튼의 숫자는 보관 중인 이벤트 수이며 검출 주기 수와 다릅니다. `jev_response`에는 접히지 않은 좌표·confidence·presence·판정·적용 기준이, `boxes_applied`에는 실제 적용 좌표·픽셀 좌표·지연 통계가 들어갑니다. HTTP 오류·JSON 해석 실패 이벤트도 보관합니다. `traceId`로 같은 주기를 연결하고 `requestId`로 HTTP 요청을 구분하며, 각 이벤트의 `sequence`와 UTC `timestamp`로 순서를 확인합니다.
+## Jev response logs
 
-페이지가 열린 동안 최근 **최대 3,000개 이벤트**를 메모리에 보관합니다. 초과하면 오래된 이벤트부터 제외하고 내보내기 파일의 `recordedEventCount`·`droppedEventCount`로 전체 기록 수와 제외 수를 알립니다. 이벤트 중간에서 잘릴 수 있으므로 가장 오래된 주기는 일부만 남을 수 있습니다. 카메라 중지·대상·프로세서 변경 시 로그는 유지되어 중지 후 내보낼 수 있지만, 새로고침·페이지 종료 시 사라집니다. 이전 버전의 콘솔에만 출력된 기록은 소급 수집하지 않습니다. 자동 파일 저장·서버 전송·localStorage 저장은 하지 않습니다. 좌표나 판정은 기록 시점의 사본으로 보관하여 이후 객체 변경에 영향을 받지 않습니다.
+In the browser developer tools (F12), open **Console** and filter by `[Pixelveil][Jev]`. Logs use the default Info level and appear in the browser console, not the server terminal.
 
-## 영역 모자이크 헬퍼
+- `response <requestId>` group: expand it to see request duration (`requestLatencyMs`), Choice result (`countChoice`), requested and accepted bbox counts, and a coordinate table. Coordinates are normalized API values (0–1), with `confidence`, per-position presence probability (`presence`), and acceptance thresholds (`confidenceThreshold`, `presenceThreshold`).
+- Table `disposition`: `accepted` means the slot passed coordinate validation and the strategy's acceptance rules; `absent` means presence is below `0.5` for Simple/Panning or `0.2` for Scroll; `zero_box` is a Panning all-zero slot; `overlap_suppressed` is a Panning candidate excluded by overlap with a selected smaller box; `low_confidence` means Box confidence is below `0.15` for Simple or `0.1` for Scroll; `invalid` means missing or invalid data; and `ignored_cancelled` identifies a cancelled request's response. An `invalid` slot can fail the whole response, so `accepted` does not imply final application. Panning's `presence` is the overall presence probability shared by all rows, not per-slot presence, and no confidence filter is used.
+- `boxes_applied`: normalized coordinates actually applied to the bbox cache (`boxes`), original-frame pixel coordinates (`pixelBoxes`), count (`boxCount`), frame dimensions, and total detection time (`detectionLatencyMs`). Pixel coordinates are recorded before the mosaic helper's rounding and clipping. `traceId` links count/Box responses and application results from the same detection cycle; each HTTP request has a separate `requestId`.
+- `response_error` / `invalid_response`: inspect HTTP error statuses or JSON parsing failures.
 
-`mosaicRegion(frame, bboxes, blockSize = 12)`는 bbox 배열을 받아 각 영역 내부의 블록을 RGB 평균색으로 채웁니다. 입력 `ImageData`를 **직접 변경하고 같은 객체를 반환**하므로 프로세서의 `process` 안에서 바로 사용할 수 있습니다. 알파값과 모든 bbox 밖 픽셀은 유지합니다.
+Logs record events such as responses, errors, detection completion, embedding checks, and transitions to tracking loss. They do not record every frame dropped as a detection input or every frame's feature points. Images, target descriptions, API keys, and authorization headers are not logged; only necessary fields such as coordinates are included.
+
+### JSON export
+
+Use **Export logs** in the bottom statistics panel to download `pixelveil-jev-<UTC timestamp>.json`. The button count is the number of retained events, not detection cycles. `jev_response` contains fully expanded coordinates, confidence, presence, decisions, and thresholds; `boxes_applied` contains applied coordinates, pixel coordinates, and latency statistics. HTTP errors and JSON parsing failures are also retained. Use `traceId` to link a cycle, `requestId` to distinguish HTTP requests, and each event's `sequence` and UTC `timestamp` to determine order.
+
+The page retains **up to the latest 3,000 events** in memory. Older events are discarded when the limit is exceeded; export fields `recordedEventCount` and `droppedEventCount` report total recorded and discarded counts. The buffer can cut through a cycle, so the oldest cycle may be incomplete. Logs survive camera stops and target/processor changes and can be exported after stopping, but disappear on reload or page close. Records previously printed only to the console by older versions cannot be collected retroactively. There is no automatic file saving, server upload, or localStorage persistence. Coordinates and decisions are copied when recorded and are not affected by subsequent object mutations.
+
+## Region mosaic helper
+
+`mosaicRegion(frame, bboxes, blockSize = 12)` accepts an array of bboxes and fills blocks within each region with their average RGB color. It **mutates the input ImageData and returns the same object**, so it can be used directly inside a processor's `process` method. Alpha values and pixels outside every bbox are preserved.
 
 ```ts
 import { mosaicRegion } from './helpers';
@@ -199,10 +233,10 @@ const bboxes: BoundingBox[] = [
 const outputFrame = mosaicRegion(inputFrame, bboxes, 16);
 ```
 
-- bbox는 프레임 좌상단을 원점으로 하는 픽셀 좌표 `{ x, y, width, height }`입니다.
-- 소수 좌표는 좌상단을 내림, 우하단을 올림하여 걸치는 픽셀을 포함합니다. 프레임 바깥 영역은 잘라냅니다.
-- 블록은 잘라낸 bbox의 좌상단에서 시작하며, 가장자리의 작은 블록은 해당 영역만 평균냅니다.
-- 빈 배열이면 변경 없이 반환합니다. 너비·높이가 0 이하이거나 프레임과 겹치지 않는 bbox는 건너뛰고 나머지 영역을 처리합니다.
-- 배열 순서대로 처리하며 겹치는 영역은 앞선 처리 결과에 다시 모자이크를 적용합니다.
-- bbox 값이 `NaN`/무한대이거나 블록 크기가 양의 안전한 정수가 아니면 프레임을 변경하기 전에 `RangeError`를 발생시킵니다. 블록 크기 1은 원본 픽셀을 유지합니다.
-- 원본 객체를 보존해야 한다면 `mosaicRegion(new ImageData(new Uint8ClampedArray(inputFrame.data), inputFrame.width, inputFrame.height, { colorSpace: inputFrame.colorSpace }), bboxes)`처럼 먼저 복사합니다.
+- Bboxes use pixel coordinates `{ x, y, width, height }`, with the origin at the frame's top-left corner.
+- For fractional coordinates, the top-left corner is rounded down and the bottom-right corner up to include intersected pixels. Areas outside the frame are clipped.
+- Blocks start at the clipped bbox's top-left corner. Smaller edge blocks average only their own pixels.
+- An empty array returns the frame unchanged. Bboxes with non-positive width/height or no overlap with the frame are skipped; other regions are still processed.
+- Regions are processed in array order. Overlapping regions are mosaiced again using the already processed pixels.
+- `NaN`/infinite bbox values or a block size that is not a positive safe integer cause a `RangeError` before the frame is changed. A block size of 1 preserves the original pixels.
+- To preserve the original object, copy it first, for example: `mosaicRegion(new ImageData(new Uint8ClampedArray(inputFrame.data), inputFrame.width, inputFrame.height, { colorSpace: inputFrame.colorSpace }), bboxes)`.
